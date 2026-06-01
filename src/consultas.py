@@ -435,10 +435,12 @@ def resumen_indicadores(plan_id):
         # Calculamos el % de avance en Python (más legible que en SQL y
         # evita problemas de NULL/0 division).
         def _pct(row):
-            mv = row["meta_valor"]
-            uv = row["ultimo_valor"]
-            if mv is None or uv is None:
-                return None
+            # pd.to_numeric(errors="coerce") tolera float, Decimal, None y
+            # cadenas no numéricas (estas -> NaN). Así evitamos el ValueError
+            # de float("N/D") que aparecía con datos servidos por PostgreSQL
+            # (psycopg2 puede devolver tipos/valores distintos a SQLite).
+            mv = pd.to_numeric(row["meta_valor"], errors="coerce")
+            uv = pd.to_numeric(row["ultimo_valor"], errors="coerce")
             if pd.isna(mv) or pd.isna(uv) or mv == 0:
                 return None
             return float(uv) / float(mv) * 100.0

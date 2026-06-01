@@ -317,8 +317,10 @@ with st.container(border=True, key="bloque_resumen_kpi"):
         tabla_k = df_kpi.copy()
 
         def _ultimo(row):
-            v = row["ultimo_valor"]
-            if v is not None and not pd.isna(v):
+            # to_numeric(coerce) evita ValueError si ultimo_valor llega como
+            # cadena no numérica (mismo motivo que en consultas.resumen_indicadores).
+            v = pd.to_numeric(row["ultimo_valor"], errors="coerce")
+            if not pd.isna(v):
                 return f"{float(v):g}"
             valor_texto = row.get("ultimo_valor_texto")
             txt = "" if pd.isna(valor_texto) else str(valor_texto).strip()
