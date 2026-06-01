@@ -123,11 +123,12 @@ en este orden:
   (con `row_factory=sqlite3.Row`). El atajo `con.execute(...)`, el placeholder
   `?` y pandas se comportan exactamente igual que siempre.
 - **PostgreSQL**: `get_conexion()` devuelve un adaptador fino (`_ConexionPG`
-  sobre psycopg2 + `RealDictCursor`) que imita la API mínima usada en el
-  proyecto (`con.execute()`, `con.cursor()`, commit/rollback/close) y **traduce
-  automáticamente `?` → `%s`**. Por eso las consultas con `?` ya existentes son
-  portables sin reescribirlas. En ambos casos las filas permiten acceso por
-  nombre (`row["plan_id"]`).
+  sobre psycopg2) que imita la API mínima usada en el proyecto (`con.execute()`,
+  `con.cursor()`, commit/rollback/close) y **traduce automáticamente `?` → `%s`**.
+  Por eso las consultas con `?` ya existentes son portables sin reescribirlas.
+  Expone **dos cursores** (ver pitfall 6): `con.cursor()` de **tuplas** (para
+  pandas) y `con.execute()` con **`RealDictCursor`** (acceso por nombre,
+  `row["plan_id"]`, como `sqlite3.Row`).
 
 ### Pitfalls de la capa de datos (importante)
 
@@ -147,6 +148,24 @@ en este orden:
    fechas de corte se siguen guardando como ISO `AAAA-MM-DD` en TEXT.
 5. **Transacciones**: en PostgreSQL son obligatorias. La carga de planes ya va
    en una transacción con `commit()` final y `rollback()` ante error.
+6. **`pandas.read_sql_query` + `RealDictCursor` = DataFrame corrupto**.
+   - *Síntoma*: el DataFrame devuelve los **nombres de columna como valor en
+     cada celda** (toda fila es `ambito_codigo`, `n_actuaciones`, ...). Aguas
+     abajo, p. ej., `df["id"]` vale la cadena `"id"` y una página puede acabar
+     mostrando "No se pudo cargar el plan" o pintando los nombres como datos.
+   - *Causa*: pandas itera el cursor esperando **tuplas** (acceso posicional);
+     `RealDictCursor` le entrega **dicts**, así que cada "fila" termina siendo
+     el conjunto de **claves** del dict (los nombres de columna), no los valores.
+   - *Regla práctica*: en PostgreSQL, `src/db.py` expone DOS cursores. El cursor
+     por defecto (`con.cursor()`) es de **tuplas** → es el que usa
+     `pd.read_sql_query` (que recibe la conexión directamente). El acceso por
+     nombre desde código Python se obtiene con `con.execute(...)`, que crea un
+     **`RealDictCursor`** explícito. Resumiendo: lo que pase por
+     `pd.read_sql_query` usa la conexión/cursor de tuplas; lo que use
+     `con.execute(...)` recibe filas-dict.
+   - *Por qué es invisible en SQLite*: `sqlite3.Row` soporta acceso **posicional
+     y por nombre** a la vez, así que pandas y el código funcionan con la misma
+     conexión sin distinguir cursores.
 
 ### Carga inicial
 
