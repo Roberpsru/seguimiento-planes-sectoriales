@@ -358,30 +358,25 @@ def resumen_por_ambito(plan_id):
     Incluye ámbitos sin actuaciones (LEFT JOIN), ordenados por el campo
     'orden' del ámbito.
     """
-    con = db.conectar()
-    try:
-        return pd.read_sql_query(
-            """
-            SELECT
-                am.codigo    AS ambito_codigo,
-                am.nombre_es AS ambito_nombre,
-                COUNT(ac.id) AS n_actuaciones,
-                SUM(CASE WHEN ac.estado = 'Previsto'  THEN 1 ELSE 0 END) AS n_previsto,
-                SUM(CASE WHEN ac.estado = 'En curso'  THEN 1 ELSE 0 END) AS n_en_curso,
-                SUM(CASE WHEN ac.estado = 'Ejecutado' THEN 1 ELSE 0 END) AS n_ejecutado,
-                COALESCE(SUM(ac.presupuesto), 0)           AS presupuesto_comprometido,
-                COALESCE(SUM(ac.presupuesto_ejecutado), 0) AS presupuesto_ejecutado
-            FROM ambitos am
-            LEFT JOIN actuaciones ac ON ac.ambito_id = am.id
-            WHERE am.plan_id = ?
-            GROUP BY am.id, am.codigo, am.nombre_es, am.orden
-            ORDER BY am.orden, am.id
-            """,
-            con,
-            params=(plan_id,),
-        )
-    finally:
-        con.close()
+    return db.leer_df(
+        """
+        SELECT
+            am.codigo    AS ambito_codigo,
+            am.nombre_es AS ambito_nombre,
+            COUNT(ac.id) AS n_actuaciones,
+            SUM(CASE WHEN ac.estado = 'Previsto'  THEN 1 ELSE 0 END) AS n_previsto,
+            SUM(CASE WHEN ac.estado = 'En curso'  THEN 1 ELSE 0 END) AS n_en_curso,
+            SUM(CASE WHEN ac.estado = 'Ejecutado' THEN 1 ELSE 0 END) AS n_ejecutado,
+            COALESCE(SUM(ac.presupuesto), 0)           AS presupuesto_comprometido,
+            COALESCE(SUM(ac.presupuesto_ejecutado), 0) AS presupuesto_ejecutado
+        FROM ambitos am
+        LEFT JOIN actuaciones ac ON ac.ambito_id = am.id
+        WHERE am.plan_id = ?
+        GROUP BY am.id, am.codigo, am.nombre_es, am.orden
+        ORDER BY am.orden, am.id
+        """,
+        (plan_id,),
+    )
 
 
 def resumen_indicadores(plan_id):
@@ -398,56 +393,56 @@ def resumen_indicadores(plan_id):
     porcentaje_avance = (ultimo_valor / meta_valor) * 100 cuando ambos existen;
                         None en caso contrario.
     """
-    con = db.conectar()
-    try:
-        df = pd.read_sql_query(
-            """
-            SELECT
-                i.numero,
-                i.categoria,
-                i.nombre_es AS nombre,
-                i.meta_es   AS meta_texto,
-                i.meta_valor,
-                (SELECT iv.periodo
-                   FROM indicador_valores iv
-                  WHERE iv.indicador_id = i.id
-                    AND iv.valor IS NOT NULL
-                  ORDER BY iv.periodo DESC, iv.id DESC
-                  LIMIT 1) AS ultimo_periodo,
-                (SELECT iv.valor
-                   FROM indicador_valores iv
-                  WHERE iv.indicador_id = i.id
-                    AND iv.valor IS NOT NULL
-                  ORDER BY iv.periodo DESC, iv.id DESC
-                  LIMIT 1) AS ultimo_valor,
-                (SELECT COALESCE(iv.valor_texto_es, iv.valor_texto_eu)
-                   FROM indicador_valores iv
-                  WHERE iv.indicador_id = i.id
-                  ORDER BY iv.periodo DESC, iv.id DESC
-                  LIMIT 1) AS ultimo_valor_texto
-            FROM indicadores i
-            WHERE i.plan_id = ?
-            ORDER BY i.numero ASC, i.id
-            """,
-            con,
-            params=(plan_id,),
-        )
-        # Calculamos el % de avance en Python (más legible que en SQL y
-        # evita problemas de NULL/0 division).
-        def _pct(row):
-            # pd.to_numeric(errors="coerce") tolera float, Decimal, None y
-            # cadenas no numéricas (estas -> NaN). Así evitamos el ValueError
-            # de float("N/D") que aparecía con datos servidos por PostgreSQL
-            # (psycopg2 puede devolver tipos/valores distintos a SQLite).
-            mv = pd.to_numeric(row["meta_valor"], errors="coerce")
-            uv = pd.to_numeric(row["ultimo_valor"], errors="coerce")
-            if pd.isna(mv) or pd.isna(uv) or mv == 0:
-                return None
-            return float(uv) / float(mv) * 100.0
+    df = db.leer_df(
+        """
+        SELECT
+            i.numero,
+            i.categoria,
+            i.nombre_es AS nombre,
+            i.meta_es   AS meta_texto,
+            i.meta_valor,
+            (SELECT iv.periodo
+               FROM indicador_valores iv
+              WHERE iv.indicador_id = i.id
+                AND iv.valor IS NOT NULL
+              ORDER BY iv.periodo DESC, iv.id DESC
+              LIMIT 1) AS ultimo_periodo,
+            (SELECT iv.valor
+               FROM indicador_valores iv
+              WHERE iv.indicador_id = i.id
+                AND iv.valor IS NOT NULL
+              ORDER BY iv.periodo DESC, iv.id DESC
+              LIMIT 1) AS ultimo_valor,
+            (SELECT COALESCE(iv.valor_texto_es, iv.valor_texto_eu)
+               FROM indicador_valores iv
+              WHERE iv.indicador_id = i.id
+              ORDER BY iv.periodo DESC, iv.id DESC
+              LIMIT 1) AS ultimo_valor_texto
+        FROM indicadores i
+        WHERE i.plan_id = ?
+        ORDER BY i.numero ASC, i.id
+        """,
+        (plan_id,),
+    )
+
+    # Calculamos el % de avance en Python (más legible que en SQL y
+    # evita problemas de NULL/0 division).
+    def _pct(row):
+        # pd.to_numeric(errors="coerce") tolera float, Decimal, None y
+        # cadenas no numéricas (estas -> NaN). Así evitamos el ValueError
+        # de float("N/D") que aparecía con datos servidos por PostgreSQL
+        # (psycopg2 puede devolver tipos/valores distintos a SQLite).
+        mv = pd.to_numeric(row["meta_valor"], errors="coerce")
+        uv = pd.to_numeric(row["ultimo_valor"], errors="coerce")
+        if pd.isna(mv) or pd.isna(uv) or mv == 0:
+            return None
+        return float(uv) / float(mv) * 100.0
+
+    if df.empty:
+        df["porcentaje_avance"] = pd.Series(dtype="float64")
+    else:
         df["porcentaje_avance"] = df.apply(_pct, axis=1)
-        return df
-    finally:
-        con.close()
+    return df
 
 
 def ultimos_movimientos(plan_id, limite=10):
@@ -458,26 +453,21 @@ def ultimos_movimientos(plan_id, limite=10):
       fecha_corte, etiqueta_corte, actuacion_nombre, ambito_nombre,
       estado, detalle
     """
-    con = db.conectar()
-    try:
-        return pd.read_sql_query(
-            """
-            SELECT
-                s.fecha_corte,
-                s.etiqueta_corte,
-                ac.nombre_es AS actuacion_nombre,
-                am.nombre_es AS ambito_nombre,
-                s.estado,
-                s.detalle_es AS detalle
-            FROM seguimientos s
-            JOIN actuaciones ac ON s.actuacion_id = ac.id
-            JOIN ambitos     am ON ac.ambito_id = am.id
-            WHERE am.plan_id = ?
-            ORDER BY s.fecha_corte DESC, s.id DESC
-            LIMIT ?
-            """,
-            con,
-            params=(plan_id, int(limite)),
-        )
-    finally:
-        con.close()
+    return db.leer_df(
+        """
+        SELECT
+            s.fecha_corte,
+            s.etiqueta_corte,
+            ac.nombre_es AS actuacion_nombre,
+            am.nombre_es AS ambito_nombre,
+            s.estado,
+            s.detalle_es AS detalle
+        FROM seguimientos s
+        JOIN actuaciones ac ON s.actuacion_id = ac.id
+        JOIN ambitos     am ON ac.ambito_id = am.id
+        WHERE am.plan_id = ?
+        ORDER BY s.fecha_corte DESC, s.id DESC
+        LIMIT ?
+        """,
+        (plan_id, int(limite)),
+    )

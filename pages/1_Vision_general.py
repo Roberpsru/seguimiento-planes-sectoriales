@@ -38,47 +38,44 @@ def cargar(plan_codigo):
     o su id no es válido, devuelve (None, None, None, None) para que la página
     lo gestione sin romper.
     """
-    con = db.conectar()
-    try:
-        df_plan = pd.read_sql_query(
-            "SELECT * FROM planes WHERE codigo = ?", con, params=(plan_codigo,)
-        )
-        if df_plan.empty:
-            return None, None, None, None
-        plan = df_plan.iloc[0]
+    # Usamos db.leer_df (no pd.read_sql_query con la conexión) para evitar el
+    # DataFrame corrupto con RealDictCursor en PostgreSQL. Ver pitfall 6 en
+    # CLAUDE.md y src/db.leer_df.
+    df_plan = db.leer_df(
+        "SELECT * FROM planes WHERE codigo = ?", (plan_codigo,)
+    )
+    if df_plan.empty:
+        return None, None, None, None
+    plan = df_plan.iloc[0]
 
-        # Coerción defensiva del id (puede llegar como Decimal/cadena según el
-        # motor de BD). Si no es numérico, no podemos consultar el resto.
-        plan_id = pd.to_numeric(plan.get("id"), errors="coerce")
-        if pd.isna(plan_id):
-            return None, None, None, None
-        plan_id = int(plan_id)
+    # Coerción defensiva del id (puede llegar como Decimal/cadena según el
+    # motor de BD). Si no es numérico, no podemos consultar el resto.
+    plan_id = pd.to_numeric(plan.get("id"), errors="coerce")
+    if pd.isna(plan_id):
+        return None, None, None, None
+    plan_id = int(plan_id)
 
-        ambitos = pd.read_sql_query(
-            "SELECT * FROM ambitos WHERE plan_id = ? ORDER BY orden",
-            con, params=(plan_id,),
-        )
-        # La subquery "ultimo_seguimiento" trae la etiqueta_corte más reciente
-        # de cada actuación (o NULL si no hay seguimientos). Se ordena por
-        # fecha_corte DESC y, como desempate, por id DESC.
-        actuaciones = pd.read_sql_query(
-            """SELECT ac.*, am.codigo AS ambito_cod, am.nombre_es AS ambito_nombre,
-                      (SELECT s.etiqueta_corte
-                         FROM seguimientos s
-                        WHERE s.actuacion_id = ac.id
-                        ORDER BY s.fecha_corte DESC, s.id DESC
-                        LIMIT 1) AS ultimo_seguimiento
-               FROM actuaciones ac JOIN ambitos am ON ac.ambito_id = am.id
-               WHERE am.plan_id = ? ORDER BY am.orden, ac.orden""",
-            con, params=(plan_id,),
-        )
-        indicadores = pd.read_sql_query(
-            "SELECT * FROM indicadores WHERE plan_id = ? ORDER BY orden",
-            con, params=(plan_id,),
-        )
-        return plan, ambitos, actuaciones, indicadores
-    finally:
-        con.close()
+    ambitos = db.leer_df(
+        "SELECT * FROM ambitos WHERE plan_id = ? ORDER BY orden", (plan_id,)
+    )
+    # La subquery "ultimo_seguimiento" trae la etiqueta_corte más reciente de
+    # cada actuación (o NULL si no hay seguimientos). Se ordena por fecha_corte
+    # DESC y, como desempate, por id DESC.
+    actuaciones = db.leer_df(
+        """SELECT ac.*, am.codigo AS ambito_cod, am.nombre_es AS ambito_nombre,
+                  (SELECT s.etiqueta_corte
+                     FROM seguimientos s
+                    WHERE s.actuacion_id = ac.id
+                    ORDER BY s.fecha_corte DESC, s.id DESC
+                    LIMIT 1) AS ultimo_seguimiento
+           FROM actuaciones ac JOIN ambitos am ON ac.ambito_id = am.id
+           WHERE am.plan_id = ? ORDER BY am.orden, ac.orden""",
+        (plan_id,),
+    )
+    indicadores = db.leer_df(
+        "SELECT * FROM indicadores WHERE plan_id = ? ORDER BY orden", (plan_id,)
+    )
+    return plan, ambitos, actuaciones, indicadores
 
 
 # --------------------------------------------------------------------------

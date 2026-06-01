@@ -243,6 +243,34 @@ def ejecutar(query, params=None, fetch=None):
         con.close()
 
 
+def leer_df(query, params=None):
+    """Ejecuta un SELECT y devuelve un pandas.DataFrame, agnóstico de motor.
+
+    IMPORTANTE: NO usa `pd.read_sql_query(con, ...)` a propósito. pandas itera
+    el cursor esperando TUPLAS (acceso posicional); con un RealDictCursor recibe
+    dicts y construye un DataFrame con los NOMBRES DE COLUMNA como valores en
+    cada celda. Aquí obtenemos filas + nombres de columna explícitamente desde
+    el cursor por defecto (tuplas en PostgreSQL, sqlite3.Row en SQLite —ambos
+    iterables posicionalmente—) y construimos el DataFrame nosotros, sin
+    depender de cómo pandas maneje la conexión. Ver pitfall 6 en CLAUDE.md.
+
+    `query` admite el marcador `{P}` o el placeholder `?` (se traducen al motor).
+    """
+    import pandas as pd
+
+    query = query.replace("{P}", P())
+    con = get_conexion()
+    try:
+        cur = con.cursor()
+        cur.execute(query, params if params is not None else ())
+        columnas = [d[0] for d in cur.description]
+        filas = cur.fetchall()
+        datos = [list(f) for f in filas] if filas else []
+        return pd.DataFrame(datos, columns=columnas)
+    finally:
+        con.close()
+
+
 # --------------------------------------------------------------------------
 # Inicialización del esquema (elige el .sql según el motor)
 # --------------------------------------------------------------------------
