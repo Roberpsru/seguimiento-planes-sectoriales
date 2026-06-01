@@ -97,21 +97,33 @@ class _CursorPG:
 
 
 class _ConexionPG:
-    """Adaptador sobre una conexión psycopg2 con cursores RealDictCursor.
+    """Adaptador sobre una conexión psycopg2.
 
     Expone la parte de la API de sqlite3.Connection que usa el proyecto:
     `execute()` como atajo, `cursor()` (para pandas), commit/rollback/close
     y `raw` para acceder a la conexión psycopg2 subyacente.
+
+    Importante — dos tipos de cursor según el consumidor:
+      - `cursor()` devuelve un cursor de TUPLAS. Lo usa pandas.read_sql_query,
+        que NO es compatible con cursores tipo dict (RealDictCursor): con dicts
+        construye un DataFrame con los nombres de columna repetidos como datos.
+      - `execute()` usa un RealDictCursor para que el resto del código acceda a
+        las filas por nombre (fila["id"], dict(fila)), igual que sqlite3.Row.
     """
 
     def __init__(self, con):
         self._con = con
 
     def cursor(self):
+        # Cursor de TUPLAS (para pandas.read_sql_query).
         return _CursorPG(self._con.cursor())
 
     def execute(self, sql, params=None):
-        cur = self.cursor()
+        # Cursor RealDict (acceso por nombre, como sqlite3.Row).
+        import psycopg2.extras
+        cur = _CursorPG(
+            self._con.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        )
         cur.execute(sql, params)
         return cur
 
@@ -137,15 +149,13 @@ def get_conexion():
 
     - SQLite: sqlite3.Connection nativa, con row_factory=sqlite3.Row y claves
       foráneas activadas (acceso a columnas por nombre: fila["plan_id"]).
-    - PostgreSQL: _ConexionPG sobre psycopg2 con cursor_factory=RealDictCursor
-      (también permite acceso por nombre: fila["plan_id"]).
+    - PostgreSQL: _ConexionPG sobre psycopg2. El cursor por defecto devuelve
+      TUPLAS (necesario para pandas.read_sql_query); el acceso por nombre se
+      obtiene en _ConexionPG.execute() con un RealDictCursor explícito.
     """
     if MOTOR_BD == "postgres":
         import psycopg2
-        import psycopg2.extras
-        con = psycopg2.connect(
-            DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor
-        )
+        con = psycopg2.connect(DATABASE_URL)
         return _ConexionPG(con)
 
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
