@@ -162,12 +162,14 @@ with st.container(border=True, key="bloque_ficha"):
     # Edición de la meta numérica (formulario independiente para guardar solo eso)
     with st.form(key=f"form_meta_{ind['id']}"):
         st.caption(t["caption_kpi_meta"])
-        meta_actual = ind.get("meta_valor")
+        # to_numeric(coerce): si meta_valor llega como cadena no numérica
+        # (p. ej. servido por PostgreSQL) -> NaN, y el input queda vacío.
+        meta_actual = pd.to_numeric(ind.get("meta_valor"), errors="coerce")
         cm1, cm2 = st.columns([1, 3])
         with cm1:
             nueva_meta = st.number_input(
                 t["meta_valor"],
-                value=float(meta_actual) if meta_actual is not None else None,
+                value=float(meta_actual) if pd.notna(meta_actual) else None,
                 step=0.01,
                 format="%g",
                 key=f"meta_input_{ind['id']}",
@@ -204,10 +206,10 @@ with st.container(border=True, key="bloque_valores"):
             with cy:
                 st.markdown(f"### {anio}")
             with cv:
-                valor_actual = actual.get("valor")
+                valor_actual = pd.to_numeric(actual.get("valor"), errors="coerce")
                 v = st.number_input(
                     f"{t['valor']} {anio}",
-                    value=float(valor_actual) if valor_actual is not None else None,
+                    value=float(valor_actual) if pd.notna(valor_actual) else None,
                     step=0.01,
                     format="%g",
                     label_visibility="collapsed",
@@ -246,11 +248,16 @@ with st.container(border=True, key="bloque_valores"):
 
     # Releemos por si acaba de haber un guardado en este mismo rerun.
     valores_existentes = consultas.listar_valores_indicador(ind["id"])
-    datos_num = [
-        (int(v["periodo"]), float(v["valor"]))
-        for v in valores_existentes
-        if v.get("valor") is not None and (v["periodo"] or "").isdigit()
-    ]
+    # Omitimos puntos cuyo valor no sea numérico (to_numeric -> NaN), igual que
+    # en el resto de la app, para no romper el gráfico con cadenas tipo 'N/D'.
+    datos_num = []
+    for v in valores_existentes:
+        if not (v["periodo"] or "").isdigit():
+            continue
+        val = pd.to_numeric(v.get("valor"), errors="coerce")
+        if pd.isna(val):
+            continue
+        datos_num.append((int(v["periodo"]), float(val)))
     datos_num.sort()
 
     if datos_num:
