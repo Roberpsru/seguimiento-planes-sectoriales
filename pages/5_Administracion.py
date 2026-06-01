@@ -35,13 +35,19 @@ idioma = selector_idioma()
 t = textos(idioma)
 plan_id = asegurar_plan_id()
 
+# A diferencia del resto de páginas, Administración debe poder usarse con la BD
+# vacía: es justo donde se carga el primer plan (p. ej. el despliegue inicial en
+# Streamlit Cloud + Supabase). Por eso NO hacemos st.stop() si no hay plan;
+# solo ocultamos el bloque de descarga y mostramos una nota informativa.
+plan_activo = plan_actual() if plan_id is not None else None
+hay_planes = plan_activo is not None
+
 st.title(t["administracion"])
-if plan_id is not None:
-    _p = plan_actual()
+if hay_planes:
     _nombre_p = (
-        _p.get("nombre_eu")
-        if idioma == "eu" and _p.get("nombre_eu")
-        else _p.get("nombre_es", "")
+        plan_activo.get("nombre_eu")
+        if idioma == "eu" and plan_activo.get("nombre_eu")
+        else plan_activo.get("nombre_es", "")
     )
     st.markdown(
         f"<div style='color:#666; font-size:0.85rem; margin:-0.5rem 0 1rem 0;'>"
@@ -49,33 +55,31 @@ if plan_id is not None:
         f"<span style='color:#999;'>({t['para_cambiar_portada']})</span></div>",
         unsafe_allow_html=True,
     )
-
-if plan_id is None:
-    st.warning(t["sin_planes"])
-    st.stop()
+else:
+    st.info(t["admin_bd_vacia"])
 
 
 # --------------------------------------------------------------------------
-# Bloque 1 — Descargar plan actual
+# Bloque 1 — Descargar plan actual (solo si hay planes en la BD)
 # --------------------------------------------------------------------------
-with st.container(border=True, key="bloque_admin_descargar"):
-    st.markdown(f"### {t['admin_descargar_titulo']}")
-    st.write(t["admin_descargar_desc"])
+if hay_planes:
+    with st.container(border=True, key="bloque_admin_descargar"):
+        st.markdown(f"### {t['admin_descargar_titulo']}")
+        st.write(t["admin_descargar_desc"])
 
-    plan_activo = plan_actual()
-    codigo_plan = plan_activo["codigo"] or "PLAN"
+        codigo_plan = plan_activo["codigo"] or "PLAN"
 
-    # Generamos los bytes solo cuando el usuario está en la página (es
-    # rápido para volúmenes razonables; si fuera lento se cachearía).
-    bytes_excel = importador.exportar_plan_a_excel(plan_activo["id"])
+        # Generamos los bytes solo cuando el usuario está en la página (es
+        # rápido para volúmenes razonables; si fuera lento se cachearía).
+        bytes_excel = importador.exportar_plan_a_excel(plan_activo["id"])
 
-    st.download_button(
-        label=t["admin_descargar_boton"].format(codigo=codigo_plan),
-        data=bytes_excel,
-        file_name=f"Plan_Sectorial_{codigo_plan}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        type="primary",
-    )
+        st.download_button(
+            label=t["admin_descargar_boton"].format(codigo=codigo_plan),
+            data=bytes_excel,
+            file_name=f"Plan_Sectorial_{codigo_plan}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+        )
 
 
 # --------------------------------------------------------------------------

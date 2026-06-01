@@ -191,6 +191,10 @@ T = {
             "Refresca cualquier otra página para ver los cambios."
         ),
         "admin_error_carga": "Error al cargar el plan:",
+        "admin_bd_vacia": (
+            "La base de datos está vacía. Sube un Excel de plan en el bloque "
+            "siguiente para comenzar."
+        ),
         # ---- Portada (app.py) ----
         "portada_titulo": "Seguimiento de Planes Sectoriales",
         "portada_selecciona_plan": "Selecciona el Plan Sectorial",
@@ -410,6 +414,10 @@ T = {
             "Aldaketak ikusteko, freskatu beste edozein orri."
         ),
         "admin_error_carga": "Errorea plana kargatzean:",
+        "admin_bd_vacia": (
+            "Datu-basea hutsik dago. Igo plan baten Excela beheko blokean "
+            "hasteko."
+        ),
         # ---- Azala (app.py) ----
         "portada_titulo": "Plan Sektorialen Jarraipena",
         "portada_selecciona_plan": "Aukeratu Plan Sektoriala",
