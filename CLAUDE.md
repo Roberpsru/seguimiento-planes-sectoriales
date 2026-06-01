@@ -1,0 +1,252 @@
+# CLAUDE.md — Guía para Claude Code
+
+Este documento proporciona contexto rápido a Claude Code (y a futuros desarrolladores) para trabajar eficazmente en este proyecto. Léelo antes de tareas grandes; ahorra iteraciones.
+
+---
+
+## Qué es este proyecto
+
+Aplicación **Streamlit + SQLite** para el seguimiento de **Planes Sectoriales** del Departamento de Alimentación, Desarrollo Rural, Agricultura y Pesca del Gobierno Vasco. La desarrolla un equipo técnico interno con apoyo de Claude.
+
+Pensada para **uso interno** (departamento + HAZI + diputaciones forales). Multi-plan y bilingüe.
+
+---
+
+## Stack y entorno
+
+- Python 3.11+, Streamlit (multipágina), SQLite, pandas, openpyxl, Plotly.
+- Sin frontend custom — todo Streamlit puro con CSS personalizado en `src/tema.py`.
+- BD local en `db/seguimiento.db` (NO se versiona; se genera la primera vez que se importa un plan).
+- Entorno de desarrollo: Windows + VSCode + venv. Activación con `.\.venv\Scripts\Activate.ps1`.
+
+---
+
+## Idioma y bilingüismo
+
+- **Idioma de trabajo: castellano.** Comentarios, prompts internos, mensajes de log, nombres de funciones, todo en castellano.
+- **La aplicación es bilingüe es/eu.** Cualquier texto visible al usuario debe pasar por `src/i18n.py`. Al añadir una clave nueva, hacerlo SIEMPRE en ambos idiomas.
+- Los datos (nombres de actuaciones, descripciones, observaciones) están almacenados bilingües en la BD. Si el euskera falta, mostrar castellano como fallback.
+
+---
+
+## Estructura clave — qué hace cada cosa
+
+- `app.py` — portada con logos, descripción y el **selector de Plan global**. Este selector escribe en `st.session_state["_plan_id_actual"]`.
+- `pages/N_*.py` — las cinco páginas funcionales. Cada una llama a `asegurar_plan_id()` al inicio y lee `st.session_state["_plan_id_actual"]`.
+- `src/i18n.py` — diccionarios de traducción + `selector_idioma()` + `selector_plan_portada()` + `asegurar_plan_id()`.
+- `src/tema.py` — `aplicar_tema()` con CSS verde institucional. Selectores específicos por clase `.st-key-bloque_*`.
+- `src/db.py` — acceso **agnóstico de motor** (SQLite o PostgreSQL). `get_conexion()` (alias `conectar()`) abre la conexión al motor activo; `P()` da el placeholder; `ejecutar()` e `insertar_devolver_id()` encapsulan diferencias entre motores; `inicializar_db()` crea el esquema correcto. Ver sección **Persistencia**.
+- `src/arranque.py` — `inicializar_si_necesario()`: en SQLite crea el esquema y carga los Excel de `datos/` si la BD está vacía. Lo llama `app.py` al arrancar. En PostgreSQL no hace nada.
+- `src/consultas.py` — funciones reutilizables para consultar planes, ámbitos, actuaciones, indicadores, seguimientos.
+- `src/importador.py` — `cargar_plan_desde_excel()` y `exportar_plan_a_excel()`. Lo usan tanto el CLI como la página de Administración.
+- `db/schema_sqlite.sql` y `db/schema_postgres.sql` — mismo esquema en cada dialecto. Tablas: `planes`, `ambitos`, `responsables`, `actuaciones`, `actuacion_responsables`, `seguimientos`, `indicadores`, `indicador_valores`, `alertas` (esta última definida pero todavía no utilizada por la app). `db.py` elige el fichero según el motor activo.
+- `documentos/` — manuales de usuario y plantilla en blanco (Guia_de_uso.docx, Guia_de_carga_de_planes.docx, Plantilla_Plan_Sectorial.xlsx). Material de consulta humana; no se procesa por código.
+
+---
+
+## Convenciones visuales
+
+- **Color primario**: verde institucional `#1F5F3A`.
+- **Fondos pastel para tarjetas** (solo en portada): verde `#EAF0EC`, azul `#E6EEF5`, ámbar `#F5EDE0`, morado `#EDE6F0`.
+- **Bordes verde** en tarjetas y bloques del resto de páginas.
+- **Cabeceras de tabla** en verde claro `#EAF0EC`.
+- **Semáforo de estados**: gris para Previsto, ámbar para En curso, verde para Ejecutado.
+- **Sin emojis** en la UI, salvo los semáforos 🟢🟡🔴 en el resumen de indicadores.
+
+### Patrón crítico de tarjetas con borde
+
+```python
+with st.container(border=True, key="bloque_xxx"):
+    ...
+```
+
+El `key=` es **esencial**: Streamlit añade la clase `.st-key-bloque_xxx` al DOM, que `src/tema.py` usa para aplicar el borde verde y, en la portada, los fondos pasteles específicos por tarjeta.
+
+---
+
+## ⚠️ Pitfalls de Streamlit aprendidos a las malas
+
+### 1. Widget unmount borra session_state
+
+Cuando un widget con `key="X"` está en una página y el usuario navega a otra, **Streamlit borra `st.session_state["X"]`** al desmontar el widget. Esto rompe la persistencia de selecciones entre páginas.
+
+**Patrón correcto** para estado compartido entre páginas (como el plan seleccionado):
+
+```python
+# Almacén persistente — clave NO asociada a ningún widget
+if "_plan_id_actual" not in st.session_state:
+    st.session_state["_plan_id_actual"] = ids[0]
+
+# Widget SIN key= (para que no contamine el almacén)
+seleccionado = st.selectbox(
+    "Plan",
+    options=ids,
+    index=ids.index(st.session_state["_plan_id_actual"]),
+    format_func=lambda i: nombres[i],
+)
+
+# Sincronización manual
+st.session_state["_plan_id_actual"] = seleccionado
+```
+
+Ver `selector_plan_portada()` en `src/i18n.py` como implementación de referencia.
+
+**Regla**: nunca usar como key de un widget la misma clave que se necesita persistir entre páginas.
+
+### 2. Estilos sobre containers
+
+`st.container(border=True)` por sí solo no permite targetearlo con CSS desde fuera. Hace falta `key="bloque_X"` para que Streamlit añada `.st-key-bloque_X` al DOM. Requiere Streamlit ≥ 1.36.
+
+### 3. Caché de Streamlit
+
+`@st.cache_data` puede dejar resultados obsoletos tras modificar la BD (carga de plan, edición de actuaciones). Si se usa, invalidar tras escrituras o reiniciar el servidor.
+
+### 4. Multipágina y orden del sidebar
+
+El orden del sidebar lo da el prefijo numérico del archivo en `pages/`. Para reordenar páginas hay que renombrar los ficheros (`1_X.py`, `2_Y.py`, etc.).
+
+---
+
+## Persistencia (SQLite / PostgreSQL)
+
+La app es **dual**: el mismo código corre sobre SQLite (local) o PostgreSQL
+(Supabase, despliegue). El motor se resuelve **una vez al importar `src/db.py`**,
+en este orden:
+
+1. Variable de entorno `DATABASE_URL` → `MOTOR_BD = "postgres"`.
+2. `st.secrets["DATABASE_URL"]` (Streamlit Cloud) → `MOTOR_BD = "postgres"`.
+3. Si no hay ninguna → `MOTOR_BD = "sqlite"` en `db/seguimiento.db`.
+
+### Cómo está resuelto
+
+- **SQLite**: `get_conexion()` devuelve la conexión NATIVA `sqlite3.Connection`
+  (con `row_factory=sqlite3.Row`). El atajo `con.execute(...)`, el placeholder
+  `?` y pandas se comportan exactamente igual que siempre.
+- **PostgreSQL**: `get_conexion()` devuelve un adaptador fino (`_ConexionPG`
+  sobre psycopg2 + `RealDictCursor`) que imita la API mínima usada en el
+  proyecto (`con.execute()`, `con.cursor()`, commit/rollback/close) y **traduce
+  automáticamente `?` → `%s`**. Por eso las consultas con `?` ya existentes son
+  portables sin reescribirlas. En ambos casos las filas permiten acceso por
+  nombre (`row["plan_id"]`).
+
+### Pitfalls de la capa de datos (importante)
+
+1. **Placeholders**: escribir SIEMPRE `?` en el SQL (o `{P}` en `db.ejecutar`).
+   No mezclar `%s` a mano: la traducción la hace `db.py`.
+2. **IDs autogenerados**: NO usar `cursor.lastrowid` directamente (no existe en
+   PostgreSQL). Usar `db.insertar_devolver_id(con, tabla, columnas, valores)`,
+   que en PostgreSQL añade `RETURNING id`.
+3. **SQL específico de motor**: evitar dialecto SQLite. Usar `COALESCE` (no
+   `IFNULL`), `CURRENT_TIMESTAMP` (no `datetime('now')`). Para "insertar
+   ignorando duplicados" hay rama por motor (`INSERT OR IGNORE` vs
+   `ON CONFLICT DO NOTHING`); ver `src/importador.py`.
+4. **Tipos de fecha**: `actuaciones.fecha_inicio_prevista` / `fecha_fin_prevista`
+   guardan **texto libre** ("1º semestre 2025") y `indicador_valores.periodo`
+   guarda el año como cadena ("2025", con usos `.isdigit()`). Por eso esas
+   columnas se mantienen **TEXT en ambos motores** (no DATE/INTEGER). Las
+   fechas de corte se siguen guardando como ISO `AAAA-MM-DD` en TEXT.
+5. **Transacciones**: en PostgreSQL son obligatorias. La carga de planes ya va
+   en una transacción con `commit()` final y `rollback()` ante error.
+
+### Carga inicial
+
+- **SQLite**: automática en el arranque (`src/arranque.py` desde `app.py`) si la
+  BD está vacía.
+- **PostgreSQL**: manual y previa, con `scripts/importar_plan.py` desde una red
+  sin restricciones. El arranque NO carga nada en PostgreSQL (evita duplicados).
+
+### Configuración local de PostgreSQL
+
+Copiar `.streamlit/secrets.toml.example` a `.streamlit/secrets.toml` y poner la
+`DATABASE_URL` real. `secrets.toml` NO se versiona; el `.example` sí.
+
+> Nota: la red de HAZI bloquea el puerto de Supabase. La prueba contra
+> PostgreSQL se hace desde Streamlit Cloud u otra red.
+
+---
+
+## Carga y exportación de planes
+
+- **Formato único**: `datos/Plan_Sectorial_<NOMBRE>.xlsx` con 8 hojas estandarizadas: Instrucciones, Plan, Ámbitos, Responsables, Actuaciones, Indicadores, Valores_indicadores, Seguimientos.
+- **Importar**: `cargar_plan_desde_excel(origen, reemplazar=False, dry_run=False)` en `src/importador.py`. Acepta path o bytes (para subidas desde Streamlit).
+- **Exportar**: `exportar_plan_a_excel(plan_id)` devuelve bytes listos para `st.download_button`.
+- **Dos clientes** de las mismas funciones: el script CLI `scripts/importar_plan.py` y la página `pages/5_Administracion.py`.
+- **Toda carga en una transacción**: rollback completo si falla cualquier paso.
+
+---
+
+## Glosario de dominio
+
+- **Plan Sectorial**: programa estratégico del Departamento (ej. Estrategia de Relevo Generacional, Plan Sectorial de Patata).
+- **Ámbito**: agrupación temática dentro de un plan (ej. "Acceso a la tierra", "Conocimiento").
+- **Actuación**: acción concreta con presupuesto, calendario, responsable y estado. Unidad básica de seguimiento.
+- **Estado**: `Previsto` / `En curso` / `Ejecutado` (mapeo de colores: gris / ámbar / verde).
+- **Seguimiento (anotación)**: corte temporal con fecha, estado y observaciones. Cada actuación acumula un historial; no se sobreescriben anotaciones previas.
+- **Indicador (KPI)**: métrica numérica con meta, unidad y valores anuales. Asociado al plan, no a una actuación concreta.
+- **Responsable**: organización o persona a cargo de una actuación. Códigos habituales: GV, HAZI, NEIKER, DDFF, DFA, DFB, DFG, SECTOR.
+
+---
+
+## Cosas que NO se deben tocar sin permiso explícito
+
+- El **esquema de la BD** (`db/schema_sqlite.sql` y `db/schema_postgres.sql`, que deben mantenerse equivalentes). Cualquier cambio implica migración de datos cargados.
+- La **estructura de las 8 hojas** del Excel estandarizado (nombres de hojas, nombres de columnas, posición de cabeceras). Romperlas rompe los importadores.
+- La función `asegurar_plan_id()` y la clave `_plan_id_actual` — costaron varias iteraciones de depuración.
+- El **idioma de trabajo**: todo en castellano.
+- Los **scripts archivados** (`scripts/archivo/`, `datos/archivo/`) son referencia histórica; no son ejemplos a imitar.
+
+---
+
+## Cosas que sí pueden iterarse libremente
+
+- Estilos visuales y textos de la UI (siempre por `src/i18n.py`).
+- Nuevas páginas o nuevas funcionalidades.
+- Reorganización interna de funciones dentro de `src/`.
+- Validaciones adicionales en el importador.
+- Nuevas consultas en `src/consultas.py`.
+
+---
+
+## Workflow típico de cambios
+
+1. **Leer primero** los ficheros relevantes. Para cualquier cambio que toque BD, leer `db/schema_sqlite.sql` (y, si aplica, `db/schema_postgres.sql`) para conocer los nombres exactos de columnas.
+2. **Identificar el patrón existente** y mantener consistencia (estilo de mensajes, estructura de página, nombres de variables).
+3. **Aplicar cambios mínimos y atómicos**. Evitar refactorizaciones grandes "de paso".
+4. **Smoke test sintáctico** tras editar varios archivos:
+   ```bash
+   python -c "import ast; [ast.parse(open(f).read()) for f in [...]]"
+   ```
+5. **Reportar** qué archivos se han modificado, con un resumen de los cambios.
+6. **Sugerir** al usuario que refresque con **Ctrl+Shift+R** para ver cambios visuales.
+
+---
+
+## Estado actual del proyecto (validado)
+
+- 5 páginas funcionales (Visión general, Gestión, Indicadores, Resumen, Administración) + portada.
+- Bilingüismo es/eu en toda la UI.
+- Selector de Plan global desde la portada, propagado a todas las páginas vía `_plan_id_actual`.
+- Carga y exportación de planes desde Excel, vía CLI y vía UI.
+- Dos planes cargados:
+  - **Estrategia de Relevo Generacional** (con datos reales, seguimientos de DIC 2025 y MAY 2026)
+  - **Plan Sectorial de Patata** (recién publicado, todas las actuaciones en estado Previsto)
+
+---
+
+## Cosas en el roadmap
+
+- Incorporar los seis planes pendientes (Vacuno Carne, Vacuno Leche, Bebidas, Ovino Latxo, Ecológico, Invernaderos).
+- Despliegue en servidor de HAZI.
+- Sistema de usuarios y permisos (Administración pasará a ser admin-only).
+- Avisos automáticos en plataforma cuando se aproximen hitos.
+- Exportación a PDF del Resumen del Plan.
+
+---
+
+## Cómo trabajar bien con este proyecto
+
+- **El usuario es Gobierno Vasco / HAZI** (no programador a tiempo completo). Habla en castellano, claro y conciso.
+- **Prefiere prompts en bloques de código copiables** para pasarlos a Claude Code desde el terminal de VSCode.
+- **Prefiere iteraciones pequeñas** y comprobables con captura/refresco, no grandes refactores de golpe.
+- **Pide opinión técnica honesta**, no validación cosmética. Si una idea suya tiene un trade-off, mencionarlo.
+- Tras cada cambio, **decir siempre** qué archivos se modificaron y qué hacer para verificar (refresco, navegación a una página concreta, etc.).

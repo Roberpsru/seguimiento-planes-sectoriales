@@ -1,0 +1,19 @@
+# Entorno virtual
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Secretos (cadena de conexión a PostgreSQL, etc.). NO versionar.
+# El fichero de ejemplo .streamlit/secrets.toml.example SÍ se versiona.
+.streamlit/secrets.toml
+
+# Base de datos local SQLite (se regenera desde datos/)
+db/seguimiento.db
+db/*.db-journal
+
+# Datos de origen (Excel) — opcional: súbelos si quieres conservarlos en el repo
+# datos/*.xlsx
+
+# Sistema
+.DS_Store
