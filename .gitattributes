@@ -1,0 +1,4 @@
+# Normaliza los finales de línea: en el repositorio siempre LF, evitando los
+# avisos "LF will be replaced by CRLF" en Windows. Git detecta automáticamente
+# los ficheros de texto y los almacena con LF.
+* text=auto eol=lf
