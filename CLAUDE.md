@@ -156,16 +156,30 @@ en este orden:
    - *Causa*: pandas itera el cursor esperando **tuplas** (acceso posicional);
      `RealDictCursor` le entrega **dicts**, así que cada "fila" termina siendo
      el conjunto de **claves** del dict (los nombres de columna), no los valores.
-   - *Regla práctica*: en PostgreSQL, `src/db.py` expone DOS cursores. El cursor
-     por defecto (`con.cursor()`) es de **tuplas** → es el que usa
-     `pd.read_sql_query` (que recibe la conexión directamente). El acceso por
-     nombre desde código Python se obtiene con `con.execute(...)`, que crea un
-     **`RealDictCursor`** explícito. Resumiendo: lo que pase por
-     `pd.read_sql_query` usa la conexión/cursor de tuplas; lo que use
-     `con.execute(...)` recibe filas-dict.
+   - *Contexto / diseño de cursores*: en PostgreSQL, `src/db.py` expone DOS
+     cursores. El cursor por defecto (`con.cursor()`) es de **tuplas**; el acceso
+     por nombre desde código Python se obtiene con `con.execute(...)`, que crea
+     un **`RealDictCursor`** explícito (`fila["id"]`, `dict(fila)`).
    - *Por qué es invisible en SQLite*: `sqlite3.Row` soporta acceso **posicional
      y por nombre** a la vez, así que pandas y el código funcionan con la misma
      conexión sin distinguir cursores.
+   - **Regla práctica (canónica)**: para leer DataFrames desde la BD, **NUNCA
+     pasar la conexión directamente a `pd.read_sql_query`**. Usar siempre
+     **`db.leer_df(query, params)`**, que construye el DataFrame manualmente
+     desde `cur.description` + `cur.fetchall()` sobre el cursor por defecto,
+     siendo agnóstico al tipo de cursor de cada motor (y a la versión de pandas).
+     Ejemplo:
+     ```python
+     import db
+     df = db.leer_df(
+         "SELECT codigo, nombre_es FROM planes WHERE estado = ?",
+         ("Activo",),
+     )
+     ```
+     El placeholder es `?` (o `{P}`); `db.leer_df` lo traduce al motor activo.
+     Las funciones de `src/consultas.py` que devuelven DataFrames
+     (`resumen_por_ambito`, `resumen_indicadores`, `ultimos_movimientos`) y
+     `cargar()` en `pages/1_Vision_general.py` ya usan este helper.
 
 ### Carga inicial
 
