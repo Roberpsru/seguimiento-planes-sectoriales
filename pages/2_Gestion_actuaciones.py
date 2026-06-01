@@ -15,6 +15,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 # Añadimos src/ al path para poder importar los módulos compartidos
@@ -192,8 +193,11 @@ with st.container(border=True, key="bloque_datos"):
             format_func=lambda v: etiq_estado.get(v, v),
         )
 
-        # Presupuesto ejecutado: number_input en €
-        valor_pe = float(actuacion.get("presupuesto_ejecutado") or 0.0)
+        # Presupuesto ejecutado: number_input en €.
+        # Coerción defensiva: si llega como cadena/Decimal/None desde la BD,
+        # se trata como 0.0 sin romper (PostgreSQL puede servir otros tipos).
+        _pe = pd.to_numeric(actuacion.get("presupuesto_ejecutado"), errors="coerce")
+        valor_pe = float(_pe) if pd.notna(_pe) else 0.0
         presupuesto_ejecutado = st.number_input(
             t["presupuesto_ejecutado"],
             min_value=0.0,
@@ -275,10 +279,16 @@ with st.container(border=True, key="bloque_datos"):
     # Presupuesto y % ejecutado (tarjetas de métrica)
     # ----------------------------------------------------------------------
     def _formato_euros(v):
-        return f"{v:,.0f} €".replace(",", ".")
+        v = pd.to_numeric(v, errors="coerce")
+        if pd.isna(v):
+            return "—"
+        return f"{float(v):,.0f} €".replace(",", ".")
 
-    presupuesto = actuacion.get("presupuesto")
-    ejecutado = actuacion.get("presupuesto_ejecutado") or 0
+    # Coerción defensiva de los importes que vienen de la BD.
+    _presup = pd.to_numeric(actuacion.get("presupuesto"), errors="coerce")
+    presupuesto = None if pd.isna(_presup) else float(_presup)
+    _ejec = pd.to_numeric(actuacion.get("presupuesto_ejecutado"), errors="coerce")
+    ejecutado = 0.0 if pd.isna(_ejec) else float(_ejec)
 
     col_a, col_b, col_c = st.columns(3)
     if presupuesto is not None:

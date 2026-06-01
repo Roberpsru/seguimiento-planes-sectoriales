@@ -32,35 +32,53 @@ aplicar_tema()
 
 @st.cache_data
 def cargar(plan_codigo):
-    """Carga en bloque los datos de un plan (cacheado para la visión general)."""
+    """Carga en bloque los datos de un plan (cacheado para la visión general).
+
+    Devuelve (plan, ambitos, actuaciones, indicadores). Si el plan no existe
+    o su id no es válido, devuelve (None, None, None, None) para que la página
+    lo gestione sin romper.
+    """
     con = db.conectar()
-    plan = pd.read_sql_query(
-        "SELECT * FROM planes WHERE codigo = ?", con, params=(plan_codigo,)
-    ).iloc[0]
-    ambitos = pd.read_sql_query(
-        "SELECT * FROM ambitos WHERE plan_id = ? ORDER BY orden",
-        con, params=(int(plan["id"]),),
-    )
-    # La subquery "ultimo_seguimiento" trae la etiqueta_corte más reciente
-    # de cada actuación (o NULL si no hay seguimientos). Se ordena por
-    # fecha_corte DESC y, como desempate, por id DESC.
-    actuaciones = pd.read_sql_query(
-        """SELECT ac.*, am.codigo AS ambito_cod, am.nombre_es AS ambito_nombre,
-                  (SELECT s.etiqueta_corte
-                     FROM seguimientos s
-                    WHERE s.actuacion_id = ac.id
-                    ORDER BY s.fecha_corte DESC, s.id DESC
-                    LIMIT 1) AS ultimo_seguimiento
-           FROM actuaciones ac JOIN ambitos am ON ac.ambito_id = am.id
-           WHERE am.plan_id = ? ORDER BY am.orden, ac.orden""",
-        con, params=(int(plan["id"]),),
-    )
-    indicadores = pd.read_sql_query(
-        "SELECT * FROM indicadores WHERE plan_id = ? ORDER BY orden",
-        con, params=(int(plan["id"]),),
-    )
-    con.close()
-    return plan, ambitos, actuaciones, indicadores
+    try:
+        df_plan = pd.read_sql_query(
+            "SELECT * FROM planes WHERE codigo = ?", con, params=(plan_codigo,)
+        )
+        if df_plan.empty:
+            return None, None, None, None
+        plan = df_plan.iloc[0]
+
+        # Coerción defensiva del id (puede llegar como Decimal/cadena según el
+        # motor de BD). Si no es numérico, no podemos consultar el resto.
+        plan_id = pd.to_numeric(plan.get("id"), errors="coerce")
+        if pd.isna(plan_id):
+            return None, None, None, None
+        plan_id = int(plan_id)
+
+        ambitos = pd.read_sql_query(
+            "SELECT * FROM ambitos WHERE plan_id = ? ORDER BY orden",
+            con, params=(plan_id,),
+        )
+        # La subquery "ultimo_seguimiento" trae la etiqueta_corte más reciente
+        # de cada actuación (o NULL si no hay seguimientos). Se ordena por
+        # fecha_corte DESC y, como desempate, por id DESC.
+        actuaciones = pd.read_sql_query(
+            """SELECT ac.*, am.codigo AS ambito_cod, am.nombre_es AS ambito_nombre,
+                      (SELECT s.etiqueta_corte
+                         FROM seguimientos s
+                        WHERE s.actuacion_id = ac.id
+                        ORDER BY s.fecha_corte DESC, s.id DESC
+                        LIMIT 1) AS ultimo_seguimiento
+               FROM actuaciones ac JOIN ambitos am ON ac.ambito_id = am.id
+               WHERE am.plan_id = ? ORDER BY am.orden, ac.orden""",
+            con, params=(plan_id,),
+        )
+        indicadores = pd.read_sql_query(
+            "SELECT * FROM indicadores WHERE plan_id = ? ORDER BY orden",
+            con, params=(plan_id,),
+        )
+        return plan, ambitos, actuaciones, indicadores
+    finally:
+        con.close()
 
 
 # --------------------------------------------------------------------------
@@ -74,10 +92,13 @@ if plan_id is None:
     st.stop()
 
 plan_record = plan_actual()
+if plan_record is None:
+    st.error("No se pudo cargar el plan seleccionado.")
+    st.stop()
 nombre_plan = (
     plan_record.get("nombre_eu")
     if idioma == "eu" and plan_record.get("nombre_eu")
-    else plan_record["nombre_es"]
+    else plan_record.get("nombre_es") or plan_record.get("codigo") or "—"
 )
 
 # --------------------------------------------------------------------------
@@ -91,7 +112,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-plan, ambitos, actuaciones, indicadores = cargar(plan_record["codigo"])
+plan, ambitos, actuaciones, indicadores = cargar(plan_record.get("codigo"))
+if plan is None:
+    st.error("No se pudo cargar el plan seleccionado.")
+    st.stop()
 if plan["objetivo_macro_es"]:
     st.markdown(
         f"""

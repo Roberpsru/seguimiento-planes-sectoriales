@@ -70,14 +70,15 @@ def _nombre(item, campo_es, campo_eu):
 
 
 def _formato_euros(v):
-    """Formato '1.234.567 €'; '—' si el valor es nulo o NaN."""
-    if v is None:
+    """Formato '1.234.567 €'; '—' si el valor es nulo, NaN o no numérico.
+
+    pd.to_numeric(coerce) tolera float, Decimal, None y cadenas (estas -> NaN),
+    evitando ValueError según el motor de BD (PostgreSQL puede servir tipos o
+    valores distintos a SQLite).
+    """
+    v = pd.to_numeric(v, errors="coerce")
+    if pd.isna(v):
         return "—"
-    try:
-        if pd.isna(v):
-            return "—"
-    except (TypeError, ValueError):
-        pass
     return f"{float(v):,.0f} €".replace(",", ".")
 
 
@@ -161,8 +162,10 @@ with st.container(border=True, key="bloque_resumen_metricas"):
     m3.metric(t["estado_en_curso"],  resumen["por_estado"].get("En curso", 0))
     m4.metric(t["estado_ejecutado"], resumen["por_estado"].get("Ejecutado", 0))
 
-    pt = resumen["presupuesto_total"] or 0
-    pe = resumen["presupuesto_ejecutado"] or 0
+    pt = pd.to_numeric(resumen["presupuesto_total"], errors="coerce")
+    pe = pd.to_numeric(resumen["presupuesto_ejecutado"], errors="coerce")
+    pt = 0.0 if pd.isna(pt) else float(pt)
+    pe = 0.0 if pd.isna(pe) else float(pe)
     p1, p2 = st.columns(2)
     p1.metric(t["presupuesto"], _formato_euros(pt))
     if pt > 0:
@@ -227,13 +230,17 @@ with st.container(border=True, key="bloque_resumen_estado"):
     # ---- Barras por ámbito (Comprometido vs Ejecutado) -----------------
     with col_b:
         st.markdown(f"**{t['avance_presupuestario_ambito']}**")
-        hay_presupuesto = (
-            not df_ambito.empty
-            and float(
+        # Sumamos los presupuestos coaccionando a numérico (PostgreSQL puede
+        # devolver Decimal o, si la columna fuese de texto, cadenas que
+        # romperían float()). Los no numéricos se ignoran (NaN).
+        hay_presupuesto = False
+        if not df_ambito.empty:
+            _suma_pres = pd.to_numeric(
                 df_ambito[["presupuesto_comprometido", "presupuesto_ejecutado"]]
-                .sum().sum()
-            ) > 0
-        )
+                .stack(),
+                errors="coerce",
+            ).sum()
+            hay_presupuesto = float(_suma_pres) > 0
         if hay_presupuesto:
             df_long = df_ambito.melt(
                 id_vars=["ambito_nombre"],
@@ -245,6 +252,7 @@ with st.container(border=True, key="bloque_resumen_estado"):
                 "presupuesto_ejecutado":    t["ejecutado"],
             }
             df_long["tipo"] = df_long["tipo"].map(mapa_tipo)
+            df_long["importe"] = pd.to_numeric(df_long["importe"], errors="coerce")
             fig_b = px.bar(
                 df_long, x="importe", y="ambito_nombre",
                 color="tipo", orientation="h", barmode="group",
@@ -278,10 +286,12 @@ with st.container(border=True, key="bloque_resumen_ambito"):
         tabla_a = df_ambito.copy()
 
         def _pct_avance(row):
-            comp = row["presupuesto_comprometido"]
-            ej = row["presupuesto_ejecutado"]
-            if comp is None or pd.isna(comp) or float(comp) == 0:
+            comp = pd.to_numeric(row["presupuesto_comprometido"], errors="coerce")
+            ej = pd.to_numeric(row["presupuesto_ejecutado"], errors="coerce")
+            if pd.isna(comp) or float(comp) == 0:
                 return "—"
+            if pd.isna(ej):
+                ej = 0.0
             return f"{float(ej) / float(comp) * 100:.1f} %"
 
         tabla_a["pct_avance"] = tabla_a.apply(_pct_avance, axis=1)
@@ -329,13 +339,15 @@ with st.container(border=True, key="bloque_resumen_kpi"):
             return txt[:80] + "…" if len(txt) > 80 else txt
 
         def _pct_kpi(v):
-            if v is None or pd.isna(v):
+            v = pd.to_numeric(v, errors="coerce")
+            if pd.isna(v):
                 return "—"
             return f"{float(v):.1f} %"
 
         def _semaforo(v):
             """Punto coloreado: verde >= 90, ámbar 50-90, rojo < 50."""
-            if v is None or pd.isna(v):
+            v = pd.to_numeric(v, errors="coerce")
+            if pd.isna(v):
                 return "—"
             v = float(v)
             if v >= 90:

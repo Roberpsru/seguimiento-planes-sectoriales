@@ -269,8 +269,9 @@ with st.container(border=True, key="bloque_valores"):
             text_auto=True,
         )
         fig.update_traces(marker_color="#1f5f3a")
-        meta_v = ind.get("meta_valor")
-        if meta_v is not None:
+        # Coerción defensiva: meta_valor puede llegar no numérico desde la BD.
+        meta_v = pd.to_numeric(ind.get("meta_valor"), errors="coerce")
+        if pd.notna(meta_v):
             fig.add_hline(
                 y=float(meta_v),
                 line_dash="dash",
@@ -294,7 +295,7 @@ with st.container(border=True, key="bloque_valores"):
         ultimo_anio, ultimo_v = datos_num[-1]
         mc1, mc2 = st.columns(2)
         mc1.metric(f"{t['ultimo_valor']} ({ultimo_anio})", f"{ultimo_v:g}")
-        if meta_v:
+        if pd.notna(meta_v) and float(meta_v) != 0:
             pct = ultimo_v / float(meta_v) * 100
             mc2.metric(t["avance_vs_meta"], f"{pct:.1f} %")
     else:
