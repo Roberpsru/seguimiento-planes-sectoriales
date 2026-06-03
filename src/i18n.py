@@ -550,6 +550,20 @@ def textos(idioma=None):
     return T[idioma]
 
 
+def idioma_actual():
+    """Devuelve el idioma activo ('es' o 'eu') según st.session_state.
+
+    Es la fuente única de verdad para que el resto del código (en especial
+    src/consultas.py) sepa en qué idioma debe servir los textos que vienen
+    de la base de datos. Por defecto 'es'. Si se invoca fuera de un contexto
+    de Streamlit (p. ej. desde un script CLI), devuelve 'es' sin romper.
+    """
+    try:
+        return st.session_state.get("idioma", "es")
+    except Exception:
+        return "es"
+
+
 # --------------------------------------------------------------------------
 # Plan activo (compartido entre páginas).
 #

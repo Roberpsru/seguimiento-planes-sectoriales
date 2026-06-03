@@ -19,6 +19,69 @@ def _a_dicts(filas):
 
 
 # --------------------------------------------------------------------------
+# Selección bilingüe de columnas (es / eu) para las consultas SQL
+# --------------------------------------------------------------------------
+#
+# Muchas consultas devuelven texto que está almacenado en la BD en dos
+# columnas paralelas: `<campo>_es` y `<campo>_eu`. Históricamente el SQL
+# fijaba siempre la columna `_es`, así que al cambiar el idioma a euskera
+# los textos de datos seguían en castellano. Estos helpers construyen la
+# cláusula SELECT correcta según el idioma activo, con FALLBACK al otro
+# idioma cuando la traducción está vacía o ausente (un plan recién cargado
+# puede no tener todavía el euskera): se ve en castellano en lugar de en
+# blanco.
+#
+# El fallback se hace en SQL con COALESCE(NULLIF(TRIM(...), ''), ...), que
+# es idéntico en SQLite y PostgreSQL (TRIM, NULLIF y COALESCE son estándar
+# en ambos motores).
+# --------------------------------------------------------------------------
+def _expr_bilingue(col, idioma):
+    """Expresión SQL (sin alias) que devuelve `col` en el idioma activo.
+
+    `col` puede incluir cualificador de tabla (p. ej. 'am.nombre'); se le
+    añaden los sufijos `_es` / `_eu`. Con fallback simétrico: si la columna
+    del idioma elegido está vacía o es NULL, devuelve la del otro idioma.
+    """
+    col_es = f"{col}_es"
+    col_eu = f"{col}_eu"
+    if idioma == "eu":
+        principal, alternativa = col_eu, col_es
+    else:
+        principal, alternativa = col_es, col_eu
+    return f"COALESCE(NULLIF(TRIM({principal}), ''), {alternativa})"
+
+
+def campos_bilingues(campos, idioma=None):
+    """Devuelve la lista de columnas bilingües lista para un SELECT.
+
+    `campos` es una lista cuyos elementos pueden ser:
+      - una cadena con el nombre base de la columna (p. ej. 'nombre' o
+        'am.nombre'): el alias resultante es el nombre sin cualificador.
+      - una tupla (columna_base, alias): para forzar un alias concreto
+        (p. ej. ('am.nombre', 'ambito_nombre')).
+
+    `idioma` por defecto es el idioma activo (i18n.idioma_actual()).
+
+    Ejemplos (idioma == 'eu'):
+        campos_bilingues(['nombre', 'descripcion'])
+        -> "COALESCE(NULLIF(TRIM(nombre_eu), ''), nombre_es) AS nombre,
+            COALESCE(NULLIF(TRIM(descripcion_eu), ''), descripcion_es) AS descripcion"
+    """
+    if idioma is None:
+        import i18n  # noqa: WPS433  (import perezoso para evitar acoplamiento)
+        idioma = i18n.idioma_actual()
+
+    partes = []
+    for campo in campos:
+        if isinstance(campo, (tuple, list)):
+            col, alias = campo
+        else:
+            col, alias = campo, campo.split(".")[-1]
+        partes.append(f"{_expr_bilingue(col, idioma)} AS {alias}")
+    return ", ".join(partes)
+
+
+# --------------------------------------------------------------------------
 # Planes / Ámbitos / Actuaciones
 # --------------------------------------------------------------------------
 def listar_planes():
@@ -358,11 +421,12 @@ def resumen_por_ambito(plan_id):
     Incluye ámbitos sin actuaciones (LEFT JOIN), ordenados por el campo
     'orden' del ámbito.
     """
+    nombre_ambito = campos_bilingues([("am.nombre", "ambito_nombre")])
     return db.leer_df(
-        """
+        f"""
         SELECT
             am.codigo    AS ambito_codigo,
-            am.nombre_es AS ambito_nombre,
+            {nombre_ambito},
             COUNT(ac.id) AS n_actuaciones,
             SUM(CASE WHEN ac.estado = 'Previsto'  THEN 1 ELSE 0 END) AS n_previsto,
             SUM(CASE WHEN ac.estado = 'En curso'  THEN 1 ELSE 0 END) AS n_en_curso,
@@ -372,7 +436,7 @@ def resumen_por_ambito(plan_id):
         FROM ambitos am
         LEFT JOIN actuaciones ac ON ac.ambito_id = am.id
         WHERE am.plan_id = ?
-        GROUP BY am.id, am.codigo, am.nombre_es, am.orden
+        GROUP BY am.id, am.codigo, am.nombre_es, am.nombre_eu, am.orden
         ORDER BY am.orden, am.id
         """,
         (plan_id,),
@@ -393,13 +457,18 @@ def resumen_indicadores(plan_id):
     porcentaje_avance = (ultimo_valor / meta_valor) * 100 cuando ambos existen;
                         None en caso contrario.
     """
+    import i18n  # noqa: WPS433
+    idioma = i18n.idioma_actual()
+    campos_ind = campos_bilingues(
+        [("i.nombre", "nombre"), ("i.meta", "meta_texto")], idioma
+    )
+    valor_texto = _expr_bilingue("iv.valor_texto", idioma)
     df = db.leer_df(
-        """
+        f"""
         SELECT
             i.numero,
             i.categoria,
-            i.nombre_es AS nombre,
-            i.meta_es   AS meta_texto,
+            {campos_ind},
             i.meta_valor,
             (SELECT iv.periodo
                FROM indicador_valores iv
@@ -413,7 +482,7 @@ def resumen_indicadores(plan_id):
                 AND iv.valor IS NOT NULL
               ORDER BY iv.periodo DESC, iv.id DESC
               LIMIT 1) AS ultimo_valor,
-            (SELECT COALESCE(iv.valor_texto_es, iv.valor_texto_eu)
+            (SELECT {valor_texto}
                FROM indicador_valores iv
               WHERE iv.indicador_id = i.id
               ORDER BY iv.periodo DESC, iv.id DESC
@@ -453,15 +522,20 @@ def ultimos_movimientos(plan_id, limite=10):
       fecha_corte, etiqueta_corte, actuacion_nombre, ambito_nombre,
       estado, detalle
     """
+    campos = campos_bilingues(
+        [
+            ("ac.nombre", "actuacion_nombre"),
+            ("am.nombre", "ambito_nombre"),
+            ("s.detalle", "detalle"),
+        ]
+    )
     return db.leer_df(
-        """
+        f"""
         SELECT
             s.fecha_corte,
             s.etiqueta_corte,
-            ac.nombre_es AS actuacion_nombre,
-            am.nombre_es AS ambito_nombre,
-            s.estado,
-            s.detalle_es AS detalle
+            {campos},
+            s.estado
         FROM seguimientos s
         JOIN actuaciones ac ON s.actuacion_id = ac.id
         JOIN ambitos     am ON ac.ambito_id = am.id

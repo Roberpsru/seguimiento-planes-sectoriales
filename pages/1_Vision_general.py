@@ -31,18 +31,24 @@ aplicar_tema()
 
 
 @st.cache_data
-def cargar(plan_codigo):
+def cargar(plan_codigo, idioma):
     """Carga en bloque los datos de un plan (cacheado para la visión general).
 
     Devuelve (plan, ambitos, actuaciones, indicadores). Si el plan no existe
     o su id no es válido, devuelve (None, None, None, None) para que la página
     lo gestione sin romper.
+
+    `idioma` ('es'/'eu') forma parte de la clave de caché y selecciona en SQL,
+    mediante consultas.campos_bilingues, los textos de datos en el idioma
+    activo con fallback al otro idioma. Las columnas localizadas se exponen
+    con nombres genéricos (objetivo_macro, nombre, ambito_nombre, meta_texto).
     """
     # Usamos db.leer_df (no pd.read_sql_query con la conexión) para evitar el
     # DataFrame corrupto con RealDictCursor en PostgreSQL. Ver pitfall 6 en
     # CLAUDE.md y src/db.leer_df.
+    objetivo_plan = consultas.campos_bilingues([("objetivo_macro", "objetivo_macro")], idioma)
     df_plan = db.leer_df(
-        "SELECT * FROM planes WHERE codigo = ?", (plan_codigo,)
+        f"SELECT *, {objetivo_plan} FROM planes WHERE codigo = ?", (plan_codigo,)
     )
     if df_plan.empty:
         return None, None, None, None
@@ -55,14 +61,18 @@ def cargar(plan_codigo):
         return None, None, None, None
     plan_id = int(plan_id)
 
+    nombre_ambito = consultas.campos_bilingues([("nombre", "nombre")], idioma)
     ambitos = db.leer_df(
-        "SELECT * FROM ambitos WHERE plan_id = ? ORDER BY orden", (plan_id,)
+        f"SELECT *, {nombre_ambito} FROM ambitos WHERE plan_id = ? ORDER BY orden",
+        (plan_id,),
     )
     # La subquery "ultimo_seguimiento" trae la etiqueta_corte más reciente de
     # cada actuación (o NULL si no hay seguimientos). Se ordena por fecha_corte
     # DESC y, como desempate, por id DESC.
+    nombre_act = consultas.campos_bilingues([("ac.nombre", "nombre")], idioma)
+    nombre_amb = consultas.campos_bilingues([("am.nombre", "ambito_nombre")], idioma)
     actuaciones = db.leer_df(
-        """SELECT ac.*, am.codigo AS ambito_cod, am.nombre_es AS ambito_nombre,
+        f"""SELECT ac.*, {nombre_act}, am.codigo AS ambito_cod, {nombre_amb},
                   (SELECT s.etiqueta_corte
                      FROM seguimientos s
                     WHERE s.actuacion_id = ac.id
@@ -72,8 +82,12 @@ def cargar(plan_codigo):
            WHERE am.plan_id = ? ORDER BY am.orden, ac.orden""",
         (plan_id,),
     )
+    campos_ind = consultas.campos_bilingues(
+        [("nombre", "nombre"), ("meta", "meta_texto")], idioma
+    )
     indicadores = db.leer_df(
-        "SELECT * FROM indicadores WHERE plan_id = ? ORDER BY orden", (plan_id,)
+        f"SELECT *, {campos_ind} FROM indicadores WHERE plan_id = ? ORDER BY orden",
+        (plan_id,),
     )
     return plan, ambitos, actuaciones, indicadores
 
@@ -109,16 +123,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-plan, ambitos, actuaciones, indicadores = cargar(plan_record.get("codigo"))
+plan, ambitos, actuaciones, indicadores = cargar(plan_record.get("codigo"), idioma)
 if plan is None:
     st.error("No se pudo cargar el plan seleccionado.")
     st.stop()
-if plan["objetivo_macro_es"]:
+if plan["objetivo_macro"]:
     st.markdown(
         f"""
         <div class="bloque-objetivo">
           <div class="titulo-objetivo">{html.escape(t["objetivo"])}</div>
-          <div class="texto-objetivo">{html.escape(plan["objetivo_macro_es"])}</div>
+          <div class="texto-objetivo">{html.escape(plan["objetivo_macro"])}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -173,11 +187,11 @@ with tab1:
 
     for _, am in ambitos.iterrows():
         sub = actuaciones[actuaciones["ambito_id"] == am["id"]]
-        st.markdown(f"#### {am['codigo']} · {am['nombre_es']}")
+        st.markdown(f"#### {am['codigo']} · {am['nombre']}")
         # Mostramos fecha inicio y fin por separado (antes salía solo "Fecha
         # prevista" con la de inicio, lo cual era confuso) y añadimos la
         # etiqueta del último seguimiento si existe.
-        tabla = sub[["nombre_es", "estado", "presupuesto", "presupuesto_nota",
+        tabla = sub[["nombre", "estado", "presupuesto", "presupuesto_nota",
                      "fecha_inicio_prevista", "fecha_fin_prevista",
                      "ultimo_seguimiento"]].copy()
         tabla["presupuesto"] = tabla.apply(
@@ -205,6 +219,6 @@ with tab2:
     for cat in indicadores["categoria"].dropna().unique():
         st.markdown(f"#### {cat}")
         sub = indicadores[indicadores["categoria"] == cat]
-        tabla = sub[["numero", "nombre_es", "meta_es"]].copy()
-        tabla.columns = ["Nº", t["indicadores"], "Meta"]
+        tabla = sub[["numero", "nombre", "meta_texto"]].copy()
+        tabla.columns = ["Nº", t["indicadores"], t["meta"]]
         st.table(tabla.style.hide(axis="index"))

@@ -325,8 +325,9 @@ with st.container(border=True, key="bloque_historial"):
                     st.write(f"**{t['estado']}:** {etiq_estado.get(s['estado'], s['estado'])}")
                 if s.get("fecha_corte"):
                     st.caption(s["fecha_corte"])
-                if s.get("detalle_es"):
-                    st.write(s["detalle_es"])
+                detalle = _nombre(s, "detalle_es", "detalle_eu")
+                if detalle:
+                    st.write(detalle)
 
     # Formulario para registrar una nueva anotación en el historial
     with st.form(key=f"form_seguim_{actuacion['id']}"):
