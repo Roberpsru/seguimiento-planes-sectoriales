@@ -27,17 +27,57 @@ Pensada para **uso interno** (departamento + HAZI + diputaciones forales). Multi
 - **La aplicación es bilingüe es/eu.** Cualquier texto visible al usuario debe pasar por `src/i18n.py`. Al añadir una clave nueva, hacerlo SIEMPRE en ambos idiomas.
 - Los datos (nombres de actuaciones, descripciones, observaciones) están almacenados bilingües en la BD. Si el euskera falta, mostrar castellano como fallback.
 
+### ⚠️ Textos de DATOS según el idioma activo (no fijar `_es`)
+
+Los textos de datos viven en columnas paralelas `<campo>_es` / `<campo>_eu`
+(ej. `nombre_es`/`nombre_eu`, `objetivo_macro_es`/`objetivo_macro_eu`,
+`detalle_es`/`detalle_eu`, `meta_es`/`meta_eu`, `valor_texto_es`/`valor_texto_eu`).
+El bug histórico fue que el SQL **fijaba siempre `_es`**, así que al cambiar a
+euskera la UI estática cambiaba pero los datos seguían en castellano.
+
+**Fuente única del idioma activo**: `i18n.idioma_actual()` → `'es'` / `'eu'`
+(lee `st.session_state["idioma"]`; `'es'` por defecto y fuera de Streamlit).
+
+**Dos patrones canónicos, según cómo se consuman los datos:**
+
+1. **Consultas que devuelven dicts con `SELECT *` o ambas columnas**
+   (`listar_planes`, `listar_ambitos`, `listar_actuaciones`, `obtener_*`,
+   `listar_indicadores`, `listar_seguimientos`): el SQL trae `_es` **y** `_eu`,
+   y la PÁGINA elige el idioma en Python con su helper local
+   `_nombre(item, campo_es, campo_eu)` (fallback al castellano). No tocar el SQL.
+
+2. **Consultas que aliasan a una columna única** (las que devuelven DataFrame:
+   `resumen_por_ambito`, `resumen_indicadores`, `ultimos_movimientos`, y las
+   queries ad-hoc de `pages/1_Vision_general.py`): usar SIEMPRE el helper
+   **`consultas.campos_bilingues(campos, idioma=None)`** en el SELECT. NUNCA
+   escribir `nombre_es AS nombre` a mano.
+   ```python
+   import consultas
+   # cada item: 'nombre'  |  'am.nombre'  |  ('am.nombre', 'ambito_nombre')
+   sel = consultas.campos_bilingues([("am.nombre", "ambito_nombre")])
+   df = db.leer_df(f"SELECT am.codigo, {sel} FROM ambitos am WHERE plan_id = ?", (pid,))
+   ```
+   Genera `COALESCE(NULLIF(TRIM(<col>_<idioma>), ''), <col>_<otro>) AS <alias>`
+   con **fallback simétrico** (si la traducción del idioma activo está vacía o
+   NULL, devuelve la del otro idioma → un plan sin euskera se ve en castellano,
+   nunca en blanco). `TRIM`/`NULLIF`/`COALESCE` son idénticos en SQLite y
+   PostgreSQL, así que es portable. El placeholder sigue siendo `?`.
+
+**Caché**: si una función con `@st.cache_data` construye SQL bilingüe (como
+`cargar()` en `pages/1_Vision_general.py`), el **idioma debe ir como argumento**
+de la función cacheada, o el cambio de idioma devolverá el DataFrame anterior.
+
 ---
 
 ## Estructura clave — qué hace cada cosa
 
 - `app.py` — portada con logos, descripción y el **selector de Plan global**. Este selector escribe en `st.session_state["_plan_id_actual"]`.
 - `pages/N_*.py` — las cinco páginas funcionales. Cada una llama a `asegurar_plan_id()` al inicio y lee `st.session_state["_plan_id_actual"]`.
-- `src/i18n.py` — diccionarios de traducción + `selector_idioma()` + `selector_plan_portada()` + `asegurar_plan_id()`.
+- `src/i18n.py` — diccionarios de traducción + `selector_idioma()` + `idioma_actual()` (idioma activo es/eu) + `selector_plan_portada()` + `asegurar_plan_id()`.
 - `src/tema.py` — `aplicar_tema()` con CSS verde institucional. Selectores específicos por clase `.st-key-bloque_*`.
 - `src/db.py` — acceso **agnóstico de motor** (SQLite o PostgreSQL). `get_conexion()` (alias `conectar()`) abre la conexión al motor activo; `P()` da el placeholder; `ejecutar()` e `insertar_devolver_id()` encapsulan diferencias entre motores; `inicializar_db()` crea el esquema correcto. Ver sección **Persistencia**.
 - `src/arranque.py` — `inicializar_si_necesario()`: en SQLite crea el esquema y carga los Excel de `datos/` si la BD está vacía. Lo llama `app.py` al arrancar. En PostgreSQL no hace nada.
-- `src/consultas.py` — funciones reutilizables para consultar planes, ámbitos, actuaciones, indicadores, seguimientos.
+- `src/consultas.py` — funciones reutilizables para consultar planes, ámbitos, actuaciones, indicadores, seguimientos. Incluye `campos_bilingues()`, vía canónica para seleccionar textos de datos en el idioma activo con fallback (ver **Idioma y bilingüismo**).
 - `src/importador.py` — `cargar_plan_desde_excel()` y `exportar_plan_a_excel()`. Lo usan tanto el CLI como la página de Administración.
 - `db/schema_sqlite.sql` y `db/schema_postgres.sql` — mismo esquema en cada dialecto. Tablas: `planes`, `ambitos`, `responsables`, `actuaciones`, `actuacion_responsables`, `seguimientos`, `indicadores`, `indicador_valores`, `alertas` (esta última definida pero todavía no utilizada por la app). `db.py` elige el fichero según el motor activo.
 - `documentos/` — manuales de usuario y plantilla en blanco (Guia_de_uso.docx, Guia_de_carga_de_planes.docx, Plantilla_Plan_Sectorial.xlsx). Material de consulta humana; no se procesa por código.
