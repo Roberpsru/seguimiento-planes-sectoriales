@@ -48,10 +48,12 @@ CREATE TABLE IF NOT EXISTS ambitos (
 --   preparado para el futuro envío de avisos, hoy puede ir vacío.
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS responsables (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    nombre       TEXT NOT NULL,
-    organizacion TEXT,
-    email        TEXT
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre          TEXT NOT NULL,        -- castellano (no se renombra: lo usa el importador)
+    nombre_eu       TEXT,
+    organizacion    TEXT,                 -- castellano
+    organizacion_eu TEXT,
+    email           TEXT
 );
 
 -- ---------------------------------------------------------------------

@@ -52,10 +52,12 @@ CREATE TABLE IF NOT EXISTS ambitos (
 -- ORGANIZACIONES / RESPONSABLES
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS responsables (
-    id           SERIAL PRIMARY KEY,
-    nombre       TEXT NOT NULL,
-    organizacion TEXT,
-    email        TEXT
+    id              SERIAL PRIMARY KEY,
+    nombre          TEXT NOT NULL,        -- castellano (no se renombra: lo usa el importador)
+    nombre_eu       TEXT,
+    organizacion    TEXT,                 -- castellano
+    organizacion_eu TEXT,
+    email           TEXT
 );
 
 -- ---------------------------------------------------------------------

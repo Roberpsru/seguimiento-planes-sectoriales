@@ -63,9 +63,16 @@ _HOJAS = {
         "anchos": {1: 22, 2: 40, 4: 12},
     },
     "Responsables": {
-        "titulo_cols": 4,
-        "cabeceras": ["Código *", "Nombre *", "Organización", "Email"],
-        "anchos": {1: 14, 2: 60, 3: 32, 4: 28},
+        "titulo_cols": 6,
+        "cabeceras": [
+            "Código *\nKodea *",
+            "Nombre castellano *\nGaztelaniazko izena *",
+            "Nombre euskera\nEuskarazko izena",
+            "Organización castellano\nGaztelaniazko erakundea",
+            "Organización euskera\nEuskarazko erakundea",
+            "Email",
+        ],
+        "anchos": {1: 14, 2: 40, 3: 40, 4: 32, 5: 32, 6: 28},
     },
     "Actuaciones": {
         "titulo_cols": 11,
@@ -93,18 +100,30 @@ _HOJAS = {
                    8: 13, 11: 12, 12: 10},
     },
     "Valores_indicadores": {
-        "titulo_cols": 4,
-        "cabeceras": ["Código KPI *", "Año *", "Valor *", "Observaciones"],
-        "anchos": {1: 14, 2: 10, 3: 16, 4: 80},
+        "titulo_cols": 5,
+        "cabeceras": [
+            "Código KPI *\nKPI kodea *",
+            "Año *\nUrtea *",
+            "Valor *\nBalioa *",
+            "Observaciones castellano\nGaztelaniazko oharrak",
+            "Observaciones euskera\nEuskarazko oharrak",
+        ],
+        "anchos": {1: 14, 2: 10, 3: 16, 4: 60, 5: 60},
     },
     "Seguimientos": {
-        "titulo_cols": 8,
+        "titulo_cols": 9,
         "cabeceras": [
-            "Código actuación *", "Fecha de corte *", "Etiqueta", "Estado *",
-            "Presupuesto ejecutado",
-            "Fecha inicio real", "Fecha fin real", "Observaciones",
+            "Código actuación *\nJarduketaren kodea *",
+            "Fecha de corte *\nMozketa-data *",
+            "Etiqueta\nEtiketa",
+            "Estado *\nEgoera *",
+            "Presupuesto ejecutado\nExekutatutako aurrekontua",
+            "Fecha inicio real\nBenetako hasiera-data",
+            "Fecha fin real\nBenetako amaiera-data",
+            "Observaciones castellano\nGaztelaniazko oharrak",
+            "Observaciones euskera\nEuskarazko oharrak",
         ],
-        "anchos": {1: 16, 2: 14, 3: 12, 4: 14, 5: 16, 6: 14, 8: 70},
+        "anchos": {1: 16, 2: 14, 3: 12, 4: 14, 5: 18, 6: 16, 7: 16, 8: 50, 9: 50},
     },
 }
 
@@ -193,6 +212,77 @@ def _filas_datos(ws):
             yield fila
 
 
+# --------------------------------------------------------------------------
+# Lectura POR NOMBRE DE CABECERA (más robusta que por posición)
+#
+# Cada hoja tiene su fila de cabecera (normalmente la fila 3). Las cabeceras
+# del Excel rediseñado son bilingües en DOS líneas dentro de la misma celda:
+# castellano arriba, euskera debajo ("Nombre castellano *\nGaztelaniazko izena *").
+# Para casar la columna sólo nos interesa la parte CASTELLANA (antes del \n).
+# --------------------------------------------------------------------------
+def _norm_cab(valor):
+    """Normaliza una cabecera para casarla por nombre.
+
+    - Toma sólo la parte castellana (lo anterior al primer salto de línea).
+    - Sustituye '_' por espacio (acepta variantes tipo 'Nombre_eu').
+    - Quita asteriscos y acentos, pasa a minúsculas y colapsa espacios.
+
+    Ej.: 'Nombre castellano *\\nGaztelaniazko izena *' -> 'nombre castellano'
+         'Año *'                                       -> 'ano'
+         'Nombre_eu'                                   -> 'nombre eu'
+    """
+    if valor is None:
+        return ""
+    texto = str(valor).split("\n")[0]
+    texto = texto.replace("_", " ").replace("*", " ")
+    texto = _norm(texto)                 # NFKD + sin acentos + minúsculas + strip
+    return " ".join(texto.split())       # colapsa espacios internos
+
+
+def _mapa_cabeceras(ws):
+    """Devuelve ({cabecera_normalizada: índice_col_0based}, fila_cabecera).
+
+    La fila de cabecera es la primera fila no vacía a partir de la fila 3
+    (título en la 1, fila 2 en blanco, cabecera en la 3 en las plantillas).
+    """
+    fila_cab = None
+    for r in range(3, 8):
+        celdas = [c.value for c in ws[r]]
+        if any(v not in (None, "") for v in celdas):
+            fila_cab = r
+            break
+    if fila_cab is None:
+        fila_cab = 3
+    mapa = {}
+    for idx, cell in enumerate(ws[fila_cab]):
+        clave = _norm_cab(cell.value)
+        if clave and clave not in mapa:
+            mapa[clave] = idx
+    return mapa, fila_cab
+
+
+def _filas_datos_cab(ws, fila_cab):
+    """Itera las filas de datos (tuplas de valores) tras la fila de cabecera."""
+    for fila in ws.iter_rows(min_row=fila_cab + 1, values_only=True):
+        if any(c not in (None, "") for c in fila):
+            yield fila
+
+
+def _val(fila, mapa, candidatos, fn=_limpiar):
+    """Valor de la primera cabecera de `candidatos` presente en la fila.
+
+    `candidatos` es una lista de claves YA normalizadas (con _norm_cab).
+    Si ninguna está en el mapa de cabeceras, devuelve None (la columna no
+    existe en este Excel -> el campo no se rellena). `fn` transforma el valor
+    bruto (_limpiar por defecto; _entero / _decimal / _fecha_iso / identidad).
+    """
+    for clave in candidatos:
+        idx = mapa.get(clave)
+        if idx is not None and idx < len(fila):
+            return fn(fila[idx])
+    return None
+
+
 def _parse_categoria(texto):
     if not texto:
         return None
@@ -242,113 +332,135 @@ def _abrir_wb(origen):
 def _leer_excel(origen):
     wb = _abrir_wb(origen)
 
+    # ---- Plan (fila única) ----
     ws = _hoja(wb, "Plan")
-    fila = next(_filas_datos(ws), None)
+    mapa, fcab = _mapa_cabeceras(ws)
+    fila = next(_filas_datos_cab(ws, fcab), None)
     if not fila:
         raise ValueError("La hoja 'Plan' está vacía.")
     plan = {
-        "codigo":         _limpiar(fila[0]),
-        "nombre_es":      _limpiar(fila[1]),
-        "nombre_eu":      _limpiar(fila[2]) if len(fila) > 2 else None,
-        "periodo_inicio": _entero(fila[3]) if len(fila) > 3 else None,
-        "periodo_fin":    _entero(fila[4]) if len(fila) > 4 else None,
-        "departamento":   _limpiar(fila[5]) if len(fila) > 5 else None,
-        "descripcion_es": _limpiar(fila[6]) if len(fila) > 6 else None,
-        "descripcion_eu": _limpiar(fila[7]) if len(fila) > 7 else None,
+        "codigo":         _val(fila, mapa, ["codigo"]),
+        "nombre_es":      _val(fila, mapa, ["nombre castellano", "nombre"]),
+        "nombre_eu":      _val(fila, mapa, ["nombre euskera", "nombre eu"]),
+        "periodo_inicio": _val(fila, mapa, ["periodo inicio"], _entero),
+        "periodo_fin":    _val(fila, mapa, ["periodo fin"], _entero),
+        "departamento":   _val(fila, mapa, ["organizacion promotora", "organizacion"]),
+        "descripcion_es": _val(fila, mapa, ["descripcion castellano", "descripcion"]),
+        "descripcion_eu": _val(fila, mapa, ["descripcion euskera", "descripcion eu"]),
     }
 
+    # ---- Ámbitos ----
     ws = _hoja(wb, "Ámbitos")
+    mapa, fcab = _mapa_cabeceras(ws)
     ambitos = []
-    for fila in _filas_datos(ws):
+    for fila in _filas_datos_cab(ws, fcab):
         amb = {
-            "codigo":    _limpiar(fila[0]),
-            "nombre_es": _limpiar(fila[1]) if len(fila) > 1 else None,
-            "nombre_eu": _limpiar(fila[2]) if len(fila) > 2 else None,
-            "orden":     _entero(fila[3])  if len(fila) > 3 else None,
+            "codigo":    _val(fila, mapa, ["codigo del ambito", "codigo"]),
+            "nombre_es": _val(fila, mapa, ["nombre castellano", "nombre"]),
+            "nombre_eu": _val(fila, mapa, ["nombre euskera", "nombre eu"]),
+            "orden":     _val(fila, mapa, ["orden"], _entero),
         }
         if amb["codigo"] and amb["nombre_es"]:
             ambitos.append(amb)
 
+    # ---- Responsables (NUEVO: nombre_eu / organizacion_eu) ----
     ws = _hoja(wb, "Responsables")
+    mapa, fcab = _mapa_cabeceras(ws)
     responsables = []
-    for fila in _filas_datos(ws):
+    for fila in _filas_datos_cab(ws, fcab):
         r = {
-            "codigo":       _limpiar(fila[0]),
-            "nombre":       _limpiar(fila[1]) if len(fila) > 1 else None,
-            "organizacion": _limpiar(fila[2]) if len(fila) > 2 else None,
-            "email":        _limpiar(fila[3]) if len(fila) > 3 else None,
+            "codigo":          _val(fila, mapa, ["codigo"]),
+            "nombre":          _val(fila, mapa, ["nombre castellano", "nombre"]),
+            "nombre_eu":       _val(fila, mapa, ["nombre euskera", "nombre eu"]),
+            "organizacion":    _val(fila, mapa, ["organizacion castellano", "organizacion"]),
+            "organizacion_eu": _val(fila, mapa, ["organizacion euskera", "organizacion eu"]),
+            "email":           _val(fila, mapa, ["email"]),
         }
         if r["codigo"] and r["nombre"]:
             responsables.append(r)
 
+    # ---- Actuaciones ----
     ws = _hoja(wb, "Actuaciones")
+    mapa, fcab = _mapa_cabeceras(ws)
     actuaciones = []
-    for fila in _filas_datos(ws):
-        presup_raw = fila[6] if len(fila) > 6 else None
+    for fila in _filas_datos_cab(ws, fcab):
+        presup_raw = _val(
+            fila, mapa,
+            ["presupuesto total (€)", "presupuesto total", "presupuesto"],
+            lambda x: x,
+        )
         a = {
-            "codigo":          _limpiar(fila[0]),
-            "ambito_codigo":   _limpiar(fila[1]) if len(fila) > 1 else None,
-            "nombre_es":       _limpiar(fila[2]) if len(fila) > 2 else None,
-            "nombre_eu":       _limpiar(fila[3]) if len(fila) > 3 else None,
-            "descripcion_es":  _limpiar(fila[4]) if len(fila) > 4 else None,
-            "descripcion_eu":  _limpiar(fila[5]) if len(fila) > 5 else None,
+            "codigo":          _val(fila, mapa, ["codigo actuacion", "codigo"]),
+            "ambito_codigo":   _val(fila, mapa, ["ambito (codigo)", "ambito codigo", "ambito"]),
+            "nombre_es":       _val(fila, mapa, ["nombre castellano", "nombre"]),
+            "nombre_eu":       _val(fila, mapa, ["nombre euskera", "nombre eu"]),
+            "descripcion_es":  _val(fila, mapa, ["descripcion castellano", "descripcion"]),
+            "descripcion_eu":  _val(fila, mapa, ["descripcion euskera", "descripcion eu"]),
             "presupuesto":     _decimal(presup_raw),
             "presupuesto_raw": presup_raw,
-            "fecha_inicio":    _fecha_iso(fila[7]) if len(fila) > 7 else None,
-            "fecha_fin":       _fecha_iso(fila[8]) if len(fila) > 8 else None,
-            "responsable_cod": _limpiar(fila[9]) if len(fila) > 9 else None,
-            "estado":          _limpiar(fila[10]) if len(fila) > 10 else None,
+            "fecha_inicio":    _val(fila, mapa, ["fecha inicio prevista", "fecha inicio"], _fecha_iso),
+            "fecha_fin":       _val(fila, mapa, ["fecha fin prevista", "fecha fin"], _fecha_iso),
+            "responsable_cod": _val(fila, mapa, ["responsable (codigo)", "responsable codigo", "responsable"]),
+            "estado":          _val(fila, mapa, ["estado inicial", "estado"]),
         }
         if a["codigo"] and a["nombre_es"]:
             actuaciones.append(a)
 
+    # ---- Indicadores ----
     ws = _hoja(wb, "Indicadores")
+    mapa, fcab = _mapa_cabeceras(ws)
     indicadores = []
-    for fila in _filas_datos(ws):
+    for fila in _filas_datos_cab(ws, fcab):
         ind = {
-            "codigo":           _limpiar(fila[0]),
-            "nombre_es":        _limpiar(fila[1]) if len(fila) > 1 else None,
-            "nombre_eu":        _limpiar(fila[2]) if len(fila) > 2 else None,
-            "tipo":             _limpiar(fila[3]) if len(fila) > 3 else None,
-            "unidad":           _limpiar(fila[4]) if len(fila) > 4 else None,
-            "definicion_es":    _limpiar(fila[5]) if len(fila) > 5 else None,
-            "definicion_eu":    _limpiar(fila[6]) if len(fila) > 6 else None,
-            "valor_linea_base": _decimal(fila[7]) if len(fila) > 7 else None,
-            "anio_linea_base":  _entero(fila[8])  if len(fila) > 8 else None,
-            "meta_valor":       _decimal(fila[9]) if len(fila) > 9 else None,
-            "meta_anio":        _entero(fila[10]) if len(fila) > 10 else None,
-            "orden":            _entero(fila[11]) if len(fila) > 11 else None,
+            "codigo":           _val(fila, mapa, ["codigo kpi", "codigo"]),
+            "nombre_es":        _val(fila, mapa, ["nombre castellano", "nombre"]),
+            "nombre_eu":        _val(fila, mapa, ["nombre euskera", "nombre eu"]),
+            "tipo":             _val(fila, mapa, ["tipo"]),
+            "unidad":           _val(fila, mapa, ["unidad"]),
+            "definicion_es":    _val(fila, mapa, ["definicion castellano", "definicion"]),
+            "definicion_eu":    _val(fila, mapa, ["definicion euskera", "definicion eu"]),
+            "valor_linea_base": _val(fila, mapa, ["valor linea base"], _decimal),
+            "anio_linea_base":  _val(fila, mapa, ["ano linea base"], _entero),
+            "meta_valor":       _val(fila, mapa, ["meta valor"], _decimal),
+            "meta_anio":        _val(fila, mapa, ["meta ano"], _entero),
+            "orden":            _val(fila, mapa, ["orden"], _entero),
         }
         if ind["codigo"] and ind["nombre_es"]:
             indicadores.append(ind)
 
+    # ---- Valores_indicadores (NUEVO: observaciones_eu -> nota_eu) ----
     ws = _hoja(wb, "Valores_indicadores")
+    mapa, fcab = _mapa_cabeceras(ws)
     valores = []
-    for fila in _filas_datos(ws):
+    for fila in _filas_datos_cab(ws, fcab):
         v = {
-            "kpi_codigo":    _limpiar(fila[0]),
-            "anio":          _entero(fila[1]) if len(fila) > 1 else None,
-            "valor":         _decimal(fila[2]) if len(fila) > 2 else None,
-            "observaciones": _limpiar(fila[3]) if len(fila) > 3 else None,
+            "kpi_codigo":       _val(fila, mapa, ["codigo kpi", "codigo"]),
+            "anio":             _val(fila, mapa, ["ano"], _entero),
+            "valor":            _val(fila, mapa, ["valor"], _decimal),
+            "observaciones":    _val(fila, mapa, ["observaciones castellano", "observaciones"]),
+            "observaciones_eu": _val(fila, mapa, ["observaciones euskera", "observaciones eu"]),
         }
         if v["kpi_codigo"]:
             valores.append(v)
 
+    # ---- Seguimientos (NUEVO: observaciones_eu -> detalle_eu) ----
     ws = _hoja(wb, "Seguimientos")
+    mapa, fcab = _mapa_cabeceras(ws)
     seguimientos = []
-    for fila in _filas_datos(ws):
-        cod = _limpiar(fila[0])
+    for fila in _filas_datos_cab(ws, fcab):
+        cod = _val(fila, mapa, ["codigo actuacion", "codigo"])
         if not cod or cod.startswith("("):
             continue
         s = {
             "actuacion_cod":     cod,
-            "fecha_corte":       _fecha_iso(fila[1]) if len(fila) > 1 else None,
-            "etiqueta":          _limpiar(fila[2]) if len(fila) > 2 else None,
-            "estado":            _limpiar(fila[3]) if len(fila) > 3 else None,
-            "presupuesto_ejec":  _decimal(fila[4]) if len(fila) > 4 else None,
-            "fecha_inicio_real": _fecha_iso(fila[5]) if len(fila) > 5 else None,
-            "fecha_fin_real":    _fecha_iso(fila[6]) if len(fila) > 6 else None,
-            "observaciones":     _limpiar(fila[7]) if len(fila) > 7 else None,
+            "fecha_corte":       _val(fila, mapa, ["fecha de corte", "fecha corte"], _fecha_iso),
+            "etiqueta":          _val(fila, mapa, ["etiqueta"]),
+            "estado":            _val(fila, mapa, ["estado"]),
+            "presupuesto_ejec":  _val(fila, mapa, ["presupuesto ejecutado"], _decimal),
+            "fecha_inicio_real": _val(fila, mapa, ["fecha inicio real"], _fecha_iso),
+            "fecha_fin_real":    _val(fila, mapa, ["fecha fin real"], _fecha_iso),
+            "observaciones":     _val(fila, mapa, ["observaciones castellano", "observaciones"]),
+            "observaciones_eu":  _val(fila, mapa, ["observaciones euskera", "observaciones eu"]),
         }
         seguimientos.append(s)
 
@@ -498,12 +610,25 @@ def _insertar(con, datos):
             (r["nombre"], org),
         ).fetchone()
         if fila:
+            # Ya existe (los responsables NO se borran al reemplazar un plan,
+            # son globales). Rellenamos su euskera si está vacío, SIN sobrescribir
+            # un valor ya presente (COALESCE deja el actual si no es NULL). Así un
+            # responsable creado por un import antiguo recibe sus traducciones al
+            # volver a subir el Excel con las columnas _eu.
+            con.execute(
+                "UPDATE responsables "
+                "   SET nombre_eu       = COALESCE(nombre_eu, ?), "
+                "       organizacion_eu = COALESCE(organizacion_eu, ?) "
+                " WHERE id = ?",
+                (r.get("nombre_eu"), r.get("organizacion_eu"), fila["id"]),
+            )
             map_responsables[r["codigo"]] = fila["id"]
         else:
             map_responsables[r["codigo"]] = db.insertar_devolver_id(
                 con, "responsables",
-                ["nombre", "organizacion", "email"],
-                [r["nombre"], org, r["email"]],
+                ["nombre", "nombre_eu", "organizacion", "organizacion_eu", "email"],
+                [r["nombre"], r.get("nombre_eu"), org, r.get("organizacion_eu"),
+                 r["email"]],
             )
 
     map_actuaciones = {}
@@ -581,9 +706,10 @@ def _insertar(con, datos):
         ind_id = map_indicadores[v["kpi_codigo"]]
         con.execute(
             """INSERT INTO indicador_valores
-                   (indicador_id, periodo, valor, nota_es)
-               VALUES (?,?,?,?)""",
-            (ind_id, str(v["anio"]), v["valor"], v["observaciones"]),
+                   (indicador_id, periodo, valor, nota_es, nota_eu)
+               VALUES (?,?,?,?,?)""",
+            (ind_id, str(v["anio"]), v["valor"],
+             v["observaciones"], v.get("observaciones_eu")),
         )
 
     for s in datos["seguimientos"]:
@@ -592,10 +718,11 @@ def _insertar(con, datos):
         con.execute(
             """INSERT INTO seguimientos
                    (actuacion_id, fecha_corte, etiqueta_corte,
-                    estado, detalle_es, presupuesto_ejecutado)
-               VALUES (?,?,?,?,?,?)""",
+                    estado, detalle_es, detalle_eu, presupuesto_ejecutado)
+               VALUES (?,?,?,?,?,?,?)""",
             (act_id, s["fecha_corte"], etiqueta,
-             s["estado"], s["observaciones"], s["presupuesto_ejec"]),
+             s["estado"], s["observaciones"], s.get("observaciones_eu"),
+             s["presupuesto_ejec"]),
         )
 
     return plan_id
@@ -969,8 +1096,10 @@ def exportar_plan_a_excel(plan_id):
     for i, r in enumerate(responsables, start=4):
         ws.cell(row=i, column=1, value=cod_resp_por_id[r["id"]])
         ws.cell(row=i, column=2, value=r["nombre"])
-        ws.cell(row=i, column=3, value=r["organizacion"])
-        ws.cell(row=i, column=4, value=r["email"])
+        ws.cell(row=i, column=3, value=r.get("nombre_eu"))
+        ws.cell(row=i, column=4, value=r["organizacion"])
+        ws.cell(row=i, column=5, value=r.get("organizacion_eu"))
+        ws.cell(row=i, column=6, value=r["email"])
 
     # ---- Actuaciones ----
     ws = _crear_hoja(wb, "Actuaciones", f"Actuaciones — {len(actuaciones)} actuaciones")
@@ -1036,6 +1165,7 @@ def exportar_plan_a_excel(plan_id):
         ws.cell(row=fila_excel, column=2, value=_periodo_a_anio(v["periodo"]))
         ws.cell(row=fila_excel, column=3, value=v["valor"])
         ws.cell(row=fila_excel, column=4, value=v["nota_es"])
+        ws.cell(row=fila_excel, column=5, value=v.get("nota_eu"))
         fila_excel += 1
 
     # ---- Seguimientos ----
@@ -1055,6 +1185,7 @@ def exportar_plan_a_excel(plan_id):
         ws.cell(row=fila_excel, column=6, value=None)
         ws.cell(row=fila_excel, column=7, value=None)
         ws.cell(row=fila_excel, column=8, value=s["detalle_es"])
+        ws.cell(row=fila_excel, column=9, value=s.get("detalle_eu"))
         fila_excel += 1
 
     # Volcado a bytes.
