@@ -35,14 +35,22 @@ def _a_dicts(filas):
 # es idéntico en SQLite y PostgreSQL (TRIM, NULLIF y COALESCE son estándar
 # en ambos motores).
 # --------------------------------------------------------------------------
-def _expr_bilingue(col, idioma):
+def _expr_bilingue(col, idioma, sin_sufijo_es=False):
     """Expresión SQL (sin alias) que devuelve `col` en el idioma activo.
 
     `col` puede incluir cualificador de tabla (p. ej. 'am.nombre'); se le
     añaden los sufijos `_es` / `_eu`. Con fallback simétrico: si la columna
     del idioma elegido está vacía o es NULL, devuelve la del otro idioma.
+
+    `sin_sufijo_es=True` para tablas donde el castellano NO lleva sufijo
+    (p. ej. `responsables.nombre` / `responsables.organizacion`): la columna
+    castellana es `col` a secas y la euskera es `col_eu`.
+        _expr_bilingue('nombre', 'eu', sin_sufijo_es=True)
+          -> "COALESCE(NULLIF(TRIM(nombre_eu), ''), nombre)"
+        _expr_bilingue('nombre', 'es', sin_sufijo_es=True)
+          -> "nombre"
     """
-    col_es = f"{col}_es"
+    col_es = col if sin_sufijo_es else f"{col}_es"
     col_eu = f"{col}_eu"
     if idioma == "eu":
         principal, alternativa = col_eu, col_es
@@ -51,7 +59,7 @@ def _expr_bilingue(col, idioma):
     return f"COALESCE(NULLIF(TRIM({principal}), ''), {alternativa})"
 
 
-def campos_bilingues(campos, idioma=None):
+def campos_bilingues(campos, idioma=None, sin_sufijo_es=False):
     """Devuelve la lista de columnas bilingües lista para un SELECT.
 
     `campos` es una lista cuyos elementos pueden ser:
@@ -61,6 +69,11 @@ def campos_bilingues(campos, idioma=None):
         (p. ej. ('am.nombre', 'ambito_nombre')).
 
     `idioma` por defecto es el idioma activo (i18n.idioma_actual()).
+
+    `sin_sufijo_es=True` para tablas cuyo castellano NO lleva sufijo `_es`
+    (hoy solo `responsables.nombre` / `responsables.organizacion`); se pasa
+    tal cual a `_expr_bilingue`. Por defecto False: no afecta a ninguna de
+    las llamadas actuales.
 
     Ejemplos (idioma == 'eu'):
         campos_bilingues(['nombre', 'descripcion'])
@@ -77,7 +90,7 @@ def campos_bilingues(campos, idioma=None):
             col, alias = campo
         else:
             col, alias = campo, campo.split(".")[-1]
-        partes.append(f"{_expr_bilingue(col, idioma)} AS {alias}")
+        partes.append(f"{_expr_bilingue(col, idioma, sin_sufijo_es)} AS {alias}")
     return ", ".join(partes)
 
 

@@ -93,8 +93,15 @@ def _formato_fecha(fecha_iso):
 
 
 @st.cache_data
-def _cargar(plan_id):
-    """Carga en bloque los cuatro conjuntos de datos del resumen."""
+def _cargar(plan_id, idioma):
+    """Carga en bloque los cuatro conjuntos de datos del resumen.
+
+    `idioma` ('es'/'eu') forma parte de la CLAVE DE CACHÉ: los resúmenes que
+    devuelven DataFrame (resumen_por_ambito, resumen_indicadores,
+    ultimos_movimientos) construyen SQL bilingüe leyendo el idioma activo, así
+    que sin este argumento la caché serviría el DataFrame del idioma anterior
+    al cambiar es<->eu. No se usa dentro: solo discrimina la entrada de caché.
+    """
     return (
         consultas.resumen_actuaciones(plan_id),
         consultas.resumen_por_ambito(plan_id),
@@ -111,7 +118,7 @@ if plan_id is None:
     st.stop()
 plan = plan_actual()
 
-resumen, df_ambito, df_kpi, df_mov = _cargar(plan["id"])
+resumen, df_ambito, df_kpi, df_mov = _cargar(plan["id"], idioma)
 
 
 # --------------------------------------------------------------------------

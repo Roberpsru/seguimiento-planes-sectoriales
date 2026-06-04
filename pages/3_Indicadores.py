@@ -216,10 +216,15 @@ with st.container(border=True, key="bloque_valores"):
                     key=f"v_{ind['id']}_{anio}",
                 )
             with co:
-                # Si en BD solo había texto descriptivo (valor_texto_es) y nada
-                # en nota_es, lo precargamos en Observaciones para que el
-                # usuario pueda revisarlo / completarlo sin perder el dato.
-                nota_inicial = actual.get("nota_es") or actual.get("valor_texto_es") or ""
+                # Precarga en el idioma activo (con fallback al castellano si el
+                # _eu está vacío). Si no hay nota pero sí texto descriptivo
+                # (valor_texto), lo usamos para que el usuario pueda revisarlo /
+                # completarlo sin perder el dato.
+                nota_inicial = (
+                    _nombre(actual, "nota_es", "nota_eu")
+                    or _nombre(actual, "valor_texto_es", "valor_texto_eu")
+                    or ""
+                )
                 n = st.text_area(
                     f"{t['observaciones']} {anio}",
                     value=nota_inicial,
