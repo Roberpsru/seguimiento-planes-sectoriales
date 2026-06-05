@@ -488,6 +488,47 @@ def etiquetas_estado(t):
 
 
 # --------------------------------------------------------------------------
+# Categorías de indicadores: traducción SOLO de presentación.
+#
+# La BD almacena la categoría en castellano (es la fuente de verdad; no hay
+# columna `_eu`). Aquí mapeamos cada valor castellano a su etiqueta por idioma
+# para mostrarlo traducido en la UI (selector de Tipo, ficha, tablas), sin
+# tocar nunca el dato almacenado.
+#
+# Si aparece una categoría nueva que no esté en el mapa, traducir_categoria()
+# devuelve el valor original tal cual (fallback seguro: mejor castellano
+# correcto que euskera inventado). Validar y añadir aquí las nuevas.
+# --------------------------------------------------------------------------
+CATEGORIAS_TRADUCIDAS = {
+    # --- Existen en BD hoy ---
+    "Resultado / Impacto": {"es": "Resultado / Impacto", "eu": "Emaitza / Eragina"},
+    "Impacto":             {"es": "Impacto",             "eu": "Eragina"},
+    "Proceso":             {"es": "Proceso",             "eu": "Prozesua"},
+    # --- Forward-compat (no usadas aún por ningún indicador) ---
+    "Resultado":           {"es": "Resultado",           "eu": "Emaitza"},
+    "Ejecución":           {"es": "Ejecución",           "eu": "Exekuzioa"},
+    "Apoyo y seguimiento": {"es": "Apoyo y seguimiento", "eu": "Laguntza eta jarraipena"},
+}
+
+
+def traducir_categoria(cat, idioma=None):
+    """Devuelve la categoría traducida al idioma activo (presentación).
+
+    `cat` es el valor castellano almacenado en BD. Si no está en
+    CATEGORIAS_TRADUCIDAS, devuelve el valor original sin tocar (fallback).
+    Si `idioma` es None, se lee el idioma activo con idioma_actual().
+    """
+    if cat is None:
+        return cat
+    if idioma is None:
+        idioma = idioma_actual()
+    entrada = CATEGORIAS_TRADUCIDAS.get(cat)
+    if not entrada:
+        return cat
+    return entrada.get(idioma) or entrada.get("es") or cat
+
+
+# --------------------------------------------------------------------------
 # Periodos canónicos para las fechas previstas.
 # El valor "" representa "sin periodo seleccionado". Los demás son los
 # tokens que se almacenan, concatenados con el año, en la columna de texto

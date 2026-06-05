@@ -26,7 +26,13 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import consultas  # noqa: E402
-from i18n import asegurar_plan_id, idioma_actual, plan_actual, textos  # noqa: E402
+from i18n import (  # noqa: E402
+    asegurar_plan_id,
+    idioma_actual,
+    plan_actual,
+    textos,
+    traducir_categoria,
+)
 
 # Años de recogida de valores fijados por especificación.
 # El "periodo" en la BD es un TEXT libre; aquí usamos el año como string.
@@ -102,10 +108,13 @@ with st.container(border=True, key="bloque_filtros_kpi"):
 
     # Clave dependiente del plan: al cambiar de plan, el widget se reinicia a
     # "Todas" en vez de quedarse pillado con una categoría del plan anterior.
+    # Las options del filtro de Tipo son los valores castellanos de BD (fuente
+    # de verdad, sin columna _eu); format_func los traduce a la pantalla con
+    # traducir_categoria. None = "Todas". key estable por plan.
     categoria_sel = st.selectbox(
         t["tipo_indicador"],
         options=opciones_categoria,
-        format_func=lambda c: t["todas"] if c is None else c,
+        format_func=lambda c: t["todas"] if c is None else traducir_categoria(c, idioma),
         key=f"cat_kpi_{plan['id']}",
     )
 
@@ -114,20 +123,21 @@ with st.container(border=True, key="bloque_filtros_kpi"):
         st.info(t["sin_indicadores"])
         st.stop()
 
-    # Clave dependiente del plan y de la categoría: al cambiar cualquiera de
-    # los dos filtros de arriba, el selector de indicador se reinicia al
-    # primero de la nueva lista (no se queda en una selección anterior que
-    # podría no estar ya disponible).
-    ind_sel = st.selectbox(
+    # Patrón canónico: options = IDs estables; el nombre traducido lo pinta
+    # format_func. Clave dependiente del plan y de la categoría: al cambiar
+    # cualquiera de los dos filtros, el selector se reinicia al primero de la
+    # nueva lista; al cambiar solo el idioma, la selección se mantiene.
+    indicadores_por_id = {i["id"]: i for i in indicadores}
+    ind_id = st.selectbox(
         t["selecciona_indicador"],
-        options=indicadores,
-        format_func=_etiqueta_indicador,
+        options=[i["id"] for i in indicadores],
+        format_func=lambda i: _etiqueta_indicador(indicadores_por_id[i]),
         key=f"ind_kpi_{plan['id']}_{categoria_sel or 'TODAS'}",
     )
 
 # Relectura tras posibles guardados (para que la ficha refleje meta_valor
 # actualizada sin esperar a un cambio de plan).
-ind = consultas.obtener_indicador(ind_sel["id"])
+ind = consultas.obtener_indicador(ind_id)
 
 # --------------------------------------------------------------------------
 # 2) Ficha del indicador (tarjeta: lectura + edición de meta numérica)
@@ -138,7 +148,7 @@ with st.container(border=True, key="bloque_ficha"):
     c1, c2 = st.columns([1, 3])
     with c1:
         st.markdown(f"**{t['categoria_kpi']}**")
-        st.write(ind.get("categoria") or "—")
+        st.write(traducir_categoria(ind.get("categoria"), idioma) or "—")
         if ind.get("unidad"):
             st.markdown(f"**{t['unidad']}**")
             st.write(ind["unidad"])

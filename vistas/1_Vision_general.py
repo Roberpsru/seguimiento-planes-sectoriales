@@ -23,7 +23,13 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import db  # noqa: E402
 import consultas  # noqa: E402
-from i18n import asegurar_plan_id, idioma_actual, plan_actual, textos  # noqa: E402
+from i18n import (  # noqa: E402
+    asegurar_plan_id,
+    idioma_actual,
+    plan_actual,
+    textos,
+    traducir_categoria,
+)
 
 
 @st.cache_data
@@ -217,7 +223,7 @@ with tab1:
 
 with tab2:
     for cat in indicadores["categoria"].dropna().unique():
-        st.markdown(f"#### {cat}")
+        st.markdown(f"#### {traducir_categoria(cat, idioma)}")
         sub = indicadores[indicadores["categoria"] == cat]
         tabla = sub[["numero", "nombre", "meta_texto"]].copy()
         tabla.columns = ["Nº", t["indicadores"], t["meta"]]

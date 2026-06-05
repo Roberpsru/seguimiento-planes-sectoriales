@@ -34,6 +34,7 @@ from i18n import (  # noqa: E402
     idioma_actual,
     plan_actual,
     textos,
+    traducir_categoria,
 )
 
 # --------------------------------------------------------------------------
@@ -368,7 +369,9 @@ with st.container(border=True, key="bloque_resumen_kpi"):
         tabla_k["pct_str"]      = tabla_k["porcentaje_avance"].map(_pct_kpi)
         tabla_k["estado_html"]  = tabla_k["porcentaje_avance"].map(_semaforo)
         tabla_k["meta_txt"]     = tabla_k["meta_texto"].fillna("—").replace("", "—")
-        tabla_k["categoria_x"]  = tabla_k["categoria"].fillna("—").replace("", "—")
+        tabla_k["categoria_x"]  = (tabla_k["categoria"]
+                                   .map(lambda c: traducir_categoria(c, idioma))
+                                   .fillna("—").replace("", "—"))
         tabla_k["numero_x"]     = tabla_k["numero"].fillna("—")
 
         cols_k = ["numero_x", "categoria_x", "nombre", "meta_txt",

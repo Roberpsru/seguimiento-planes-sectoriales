@@ -142,28 +142,38 @@ with st.container(border=True, key="bloque_filtros"):
         st.info(t["sin_ambitos"])
         st.stop()
 
-    ambito = st.selectbox(
+    # Patrón canónico: options = IDs estables; el nombre traducido lo pinta
+    # format_func (se reevalúa en cada rerun, así que sigue el idioma activo).
+    # key dependiente del plan: persiste la selección al cambiar de idioma y se
+    # reinicia al primer ámbito al cambiar de plan.
+    ambitos_por_id = {a["id"]: a for a in ambitos}
+    ambito_id = st.selectbox(
         t["selecciona_ambito"],
-        options=ambitos,
-        format_func=lambda a: f"{a.get('codigo') or ''} · "
-                              f"{_nombre(a, 'nombre_es', 'nombre_eu')}".strip(" ·"),
+        options=[a["id"] for a in ambitos],
+        format_func=lambda i: f"{ambitos_por_id[i].get('codigo') or ''} · "
+                              f"{_nombre(ambitos_por_id[i], 'nombre_es', 'nombre_eu')}".strip(" ·"),
+        key=f"sel_ambito_{plan['id']}",
     )
 
-    actuaciones = consultas.listar_actuaciones(ambito["id"])
+    actuaciones = consultas.listar_actuaciones(ambito_id)
     if not actuaciones:
         st.info(t["sin_actuaciones"])
         st.stop()
 
-    actuacion_sel = st.selectbox(
+    # key dependiente de plan + ámbito: al cambiar el ámbito se reinicia a la
+    # primera actuación; al cambiar solo el idioma, la selección se mantiene.
+    actuaciones_por_id = {ac["id"]: ac for ac in actuaciones}
+    actuacion_id = st.selectbox(
         t["selecciona_actuacion"],
-        options=actuaciones,
-        format_func=lambda ac: f"{ac.get('codigo') or ''} · "
-                               f"{_nombre(ac, 'nombre_es', 'nombre_eu')}".strip(" ·"),
+        options=[ac["id"] for ac in actuaciones],
+        format_func=lambda i: f"{actuaciones_por_id[i].get('codigo') or ''} · "
+                              f"{_nombre(actuaciones_por_id[i], 'nombre_es', 'nombre_eu')}".strip(" ·"),
+        key=f"sel_actuacion_{plan['id']}_{ambito_id}",
     )
 
 # Lectura fresca de la actuación seleccionada (en cada rerun) para asegurarnos
 # de mostrar los valores actuales tras posibles guardados.
-actuacion = consultas.obtener_actuacion(actuacion_sel["id"])
+actuacion = consultas.obtener_actuacion(actuacion_id)
 
 # --------------------------------------------------------------------------
 # 2) Datos de la actuación (tarjeta con formulario + tarjetas de presupuesto)
