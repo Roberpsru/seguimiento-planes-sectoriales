@@ -25,6 +25,7 @@ import db  # noqa: E402
 import consultas  # noqa: E402
 from i18n import (  # noqa: E402
     asegurar_plan_id,
+    etiquetas_estado,
     idioma_actual,
     plan_actual,
     textos,
@@ -178,15 +179,22 @@ with tab1:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # Tabla de actuaciones por ámbito
-    _COLOR_ESTADO = {
+    # Tabla de actuaciones por ámbito.
+    # El estado se almacena en castellano en BD; se MUESTRA traducido al idioma
+    # activo (etiq_estado) conservando el color. El color se indexa por la
+    # etiqueta YA traducida, que es la que acaba en la celda de la tabla.
+    etiq_estado = etiquetas_estado(t)
+    _COLOR_ESTADO_BD = {
         "Previsto":  "#8a9690",
         "En curso":  "#c87a1f",
         "Ejecutado": "#1f5f3a",
     }
+    _color_por_etiqueta = {
+        etiq_estado.get(k, k): c for k, c in _COLOR_ESTADO_BD.items()
+    }
 
     def _estilo_estado(valor):
-        color = _COLOR_ESTADO.get(valor)
+        color = _color_por_etiqueta.get(valor)
         if color:
             return f"color: {color}; font-weight: 600;"
         return ""
@@ -211,7 +219,7 @@ with tab1:
         # Prefijamos un punto al texto del estado (mismo color, gracias al
         # Styler de más abajo) para reforzar el indicador visual.
         tabla["estado"] = tabla["estado"].fillna("—").map(
-            lambda v: f"● {v}" if v in _COLOR_ESTADO else v
+            lambda v: f"● {etiq_estado[v]}" if v in _COLOR_ESTADO_BD else v
         )
         tabla.columns = [t["actuaciones"], t["estado"], t["presupuesto"],
                          t["fecha_inicio"], t["fecha_fin"], t["ultimo_seguimiento"]]
