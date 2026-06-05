@@ -46,7 +46,11 @@ def cargar(plan_codigo, idioma):
     # Usamos db.leer_df (no pd.read_sql_query con la conexión) para evitar el
     # DataFrame corrupto con RealDictCursor en PostgreSQL. Ver pitfall 6 en
     # CLAUDE.md y src/db.leer_df.
-    objetivo_plan = consultas.campos_bilingues([("objetivo_macro", "objetivo_macro")], idioma)
+    # El cuadro "Objetivo/Helburua" lee descripcion_*, que está completa en
+    # ambos idiomas. objetivo_macro_eu está vacío (el importador no lo rellena),
+    # así que en euskera hacía fallback al castellano. Mantenemos el alias
+    # 'objetivo_macro' para no tocar el resto de la página.
+    objetivo_plan = consultas.campos_bilingues([("descripcion", "objetivo_macro")], idioma)
     df_plan = db.leer_df(
         f"SELECT *, {objetivo_plan} FROM planes WHERE codigo = ?", (plan_codigo,)
     )

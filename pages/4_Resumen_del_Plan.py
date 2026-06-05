@@ -139,7 +139,9 @@ with st.container(border=True, key="bloque_resumen_cabecera"):
     elif pi or pf:
         st.markdown(f"**{pi or pf}**")
 
-    objetivo = _nombre(plan, "objetivo_macro_es", "objetivo_macro_eu")
+    # Lee descripcion_* (completa en es/eu). objetivo_macro_eu está vacío, así
+    # que con idioma=eu el cuadro caía al castellano. Ver listar_planes().
+    objetivo = _nombre(plan, "descripcion_es", "descripcion_eu")
     if objetivo:
         st.markdown(
             f"""

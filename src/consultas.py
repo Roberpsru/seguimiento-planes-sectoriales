@@ -102,8 +102,8 @@ def listar_planes():
     con = db.conectar()
     try:
         filas = con.execute(
-            "SELECT id, codigo, nombre_es, nombre_eu, objetivo_macro_es, "
-            "       objetivo_macro_eu, estado "
+            "SELECT id, codigo, nombre_es, nombre_eu, descripcion_es, "
+            "       descripcion_eu, objetivo_macro_es, objetivo_macro_eu, estado "
             "  FROM planes "
             " ORDER BY id"
         ).fetchall()
