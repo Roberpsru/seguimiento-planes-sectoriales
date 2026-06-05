@@ -67,6 +67,33 @@ euskera la UI estática cambiaba pero los datos seguían en castellano.
 `cargar()` en `vistas/1_Vision_general.py`), el **idioma debe ir como argumento**
 de la función cacheada, o el cambio de idioma devolverá el DataFrame anterior.
 
+### ⚠️ Datos NO bilingües (estado, categoría): traducir SOLO al mostrar
+
+Algunos textos de datos **no** tienen columna `_eu`: son una **enumeración
+cerrada en castellano que es la fuente de verdad en BD** (se usa como valor de
+filtro, de selector y de escritura). No se traducen en BD; se traducen **solo
+en presentación** con un mapa en `src/i18n.py`. Regla de oro: **el valor que se
+guarda / consulta / pasa a un selector sigue siendo el castellano; solo cambia
+cómo se MUESTRA.**
+
+- **Estado de actuación** (`Previsto` / `En curso` / `Ejecutado`): lista canónica
+  `ESTADOS` + `etiquetas_estado(t)` → dict `{valor_BD: etiqueta_traducida}`.
+  Mostrar SIEMPRE con `etiq_estado.get(v, v)` (o `format_func` en selectores).
+  Si además hay color por estado, **indexa el color por la etiqueta ya
+  traducida** (lo que acaba en la celda), no por el valor crudo —
+  ver tabla de `vistas/1_Vision_general.py`.
+- **Categoría de indicador** (`Resultado / Impacto`, `Impacto`, `Proceso`):
+  `CATEGORIAS_TRADUCIDAS` + `traducir_categoria(cat, idioma=None)`. Devuelve el
+  valor original tal cual si la categoría no está en el mapa (fallback seguro:
+  mejor castellano correcto que euskera inventado). Si aparece una categoría
+  nueva en BD, **validar la traducción con el usuario** antes de añadirla.
+
+Sitios donde hoy se aplica `traducir_categoria`: selector "Tipo" y ficha en
+`3_Indicadores.py`, tabla de `4_Resumen_del_Plan.py` y agrupación de
+`1_Vision_general.py`. Sitios con `etiquetas_estado`: selectores y historial de
+`2_Gestion_actuaciones.py`, métricas/donut/últimos movimientos de
+`4_Resumen_del_Plan.py` y la tabla de `1_Vision_general.py`.
+
 ---
 
 ## Estructura clave — qué hace cada cosa
@@ -74,7 +101,7 @@ de la función cacheada, o el cambio de idioma devolverá el DataFrame anterior.
 - `app.py` — **router** de la app (lo que se pasa a `streamlit run`). Con la API `st.Page` + `st.navigation` NO contiene contenido de página: ejecuta una sola vez `set_page_config`, `aplicar_tema()`, el arranque de la BD y el **único selector de idioma** (`selector_idioma_portada()`); luego construye el menú con los títulos traducidos (`TITULOS_PAGINAS[idioma_actual()]`) y ejecuta la página seleccionada (`pg.run()`). Se ejecuta en CADA rerun (es el marco común de todas las páginas).
 - `vistas/Inicio.py` — la **portada** (antes en `app.py`): logos, intro, tarjetas de acceso y el **selector de Plan global** (escribe en `st.session_state["_plan_id_actual"]`).
 - `vistas/N_*.py` — las cinco páginas funcionales. Viven en `vistas/` (NO en `pages/`, ver pitfall 4). Cada una llama a `asegurar_plan_id()` al inicio, lee el idioma con `idioma_actual()` y NO pinta su propio `set_page_config`/`aplicar_tema`/selector de idioma (lo hace el router).
-- `src/i18n.py` — diccionarios de traducción `T` + `TITULOS_PAGINAS` (títulos de página es/eu para el menú) + `selector_idioma_portada()` (único selector, en el router; `selector_idioma()` queda como alias deprecated) + `idioma_actual()` (idioma activo es/eu) + `selector_plan_portada()` + `asegurar_plan_id()`.
+- `src/i18n.py` — diccionarios de traducción `T` + `TITULOS_PAGINAS` (títulos de página es/eu para el menú) + `selector_idioma_portada()` (único selector, en el router; `selector_idioma()` queda como alias deprecated) + `idioma_actual()` (idioma activo es/eu) + `selector_plan_portada()` + `asegurar_plan_id()`. Para **datos no bilingües** (enumeraciones castellanas que se traducen solo al mostrar): `ESTADOS` + `etiquetas_estado(t)` (estados) y `CATEGORIAS_TRADUCIDAS` + `traducir_categoria(cat, idioma)` (categorías de indicador) — ver **Idioma y bilingüismo**.
 - `src/tema.py` — `aplicar_tema()` con CSS verde institucional. Selectores específicos por clase `.st-key-bloque_*`.
 - `src/db.py` — acceso **agnóstico de motor** (SQLite o PostgreSQL). `get_conexion()` (alias `conectar()`) abre la conexión al motor activo; `P()` da el placeholder; `ejecutar()` e `insertar_devolver_id()` encapsulan diferencias entre motores; `inicializar_db()` crea el esquema correcto. Ver sección **Persistencia**.
 - `src/arranque.py` — `inicializar_si_necesario()`: en SQLite crea el esquema y carga los Excel de `datos/` si la BD está vacía. Lo llama el router `app.py` al arrancar. En PostgreSQL no hace nada.
@@ -159,6 +186,39 @@ Por eso la carpeta se llama `vistas/`.
   cambiar de idioma en el sidebar, los nombres del menú cambian al instante.
 - **Enlaces internos**: `st.page_link("vistas/N_*.py", ...)` (la portada usa
   estos para las tarjetas de acceso rápido).
+
+### 5. `st.selectbox` que muestra contenido traducido → opciones = IDs estables
+
+Un selector cuyas `options` sean **strings traducidos** o **dicts re-leídos** se
+desincroniza al cambiar de idioma: el valor guardado en `session_state` ya no
+coincide con ninguna opción nueva (queda en castellano o muestra "Choose an
+option"). Además, un selectbox **sin `key=`** deriva su clave automática del
+`label`, que ES traducido (`"Selecciona ámbito"` → `"Aukeratu esparrua"`): al
+cambiar de idioma Streamlit lo trata como widget nuevo y **reinicia la
+selección**.
+
+**Patrón canónico** (lo aplican los selectores de `2_Gestion_actuaciones.py` y
+`3_Indicadores.py`): `options` = **IDs estables**, nombre traducido vía
+`format_func` (se reevalúa en cada rerun → sigue el idioma activo), y `key`
+**estable que NO dependa del label**:
+
+```python
+items_por_id = {it["id"]: it for it in items}
+sel_id = st.selectbox(
+    t["selecciona_x"],
+    options=[it["id"] for it in items],
+    format_func=lambda i: _nombre(items_por_id[i], "nombre_es", "nombre_eu"),
+    key=f"sel_x_{plan['id']}",          # estable; cambia de plan → reinicia
+)
+item = consultas.obtener_x(sel_id)      # downstream recibe el ID, no el dict
+```
+
+- La `key` debe incluir aquello cuyo cambio SÍ deba reiniciar el selector
+  (plan, ámbito, categoría) y nada más; así el cambio de idioma la mantiene.
+- **Excepción** (enumeraciones castellanas, ver bilingüismo): las `options`
+  son los **strings de BD** tal cual (fuente de verdad para guardar) y solo el
+  `format_func` traduce — p. ej. estado con `etiquetas_estado`, "Tipo" con
+  `traducir_categoria`. NO migrar esos a IDs.
 
 ---
 
