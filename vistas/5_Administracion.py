@@ -21,17 +21,9 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import importador  # noqa: E402
-from i18n import asegurar_plan_id, plan_actual, selector_idioma, textos  # noqa: E402
-from tema import aplicar_tema  # noqa: E402
+from i18n import asegurar_plan_id, idioma_actual, plan_actual, textos  # noqa: E402
 
-
-st.set_page_config(
-    page_title="Administración",
-    layout="wide",
-)
-aplicar_tema()
-
-idioma = selector_idioma()
+idioma = idioma_actual()
 t = textos(idioma)
 plan_id = asegurar_plan_id()
 

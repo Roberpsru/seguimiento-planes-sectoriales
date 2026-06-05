@@ -121,8 +121,9 @@ postgresql://usuario:contraseña@host:6543/postgres
 
 ```
 seguimiento_planes/
-├── app.py                              # Portada con selector de Plan
-├── pages/
+├── app.py                              # Router: st.navigation + selector de idioma
+├── vistas/                             # Páginas (st.Page); NO usar el nombre mágico pages/
+│   ├── Inicio.py                       # Portada: logos, intro y selector de Plan
 │   ├── 1_Vision_general.py
 │   ├── 2_Gestion_actuaciones.py
 │   ├── 3_Indicadores.py

@@ -48,7 +48,7 @@ euskera la UI estática cambiaba pero los datos seguían en castellano.
 
 2. **Consultas que aliasan a una columna única** (las que devuelven DataFrame:
    `resumen_por_ambito`, `resumen_indicadores`, `ultimos_movimientos`, y las
-   queries ad-hoc de `pages/1_Vision_general.py`): usar SIEMPRE el helper
+   queries ad-hoc de `vistas/1_Vision_general.py`): usar SIEMPRE el helper
    **`consultas.campos_bilingues(campos, idioma=None)`** en el SELECT. NUNCA
    escribir `nombre_es AS nombre` a mano.
    ```python
@@ -64,19 +64,20 @@ euskera la UI estática cambiaba pero los datos seguían en castellano.
    PostgreSQL, así que es portable. El placeholder sigue siendo `?`.
 
 **Caché**: si una función con `@st.cache_data` construye SQL bilingüe (como
-`cargar()` en `pages/1_Vision_general.py`), el **idioma debe ir como argumento**
+`cargar()` en `vistas/1_Vision_general.py`), el **idioma debe ir como argumento**
 de la función cacheada, o el cambio de idioma devolverá el DataFrame anterior.
 
 ---
 
 ## Estructura clave — qué hace cada cosa
 
-- `app.py` — portada con logos, descripción y el **selector de Plan global**. Este selector escribe en `st.session_state["_plan_id_actual"]`.
-- `pages/N_*.py` — las cinco páginas funcionales. Cada una llama a `asegurar_plan_id()` al inicio y lee `st.session_state["_plan_id_actual"]`.
-- `src/i18n.py` — diccionarios de traducción + `selector_idioma()` + `idioma_actual()` (idioma activo es/eu) + `selector_plan_portada()` + `asegurar_plan_id()`.
+- `app.py` — **router** de la app (lo que se pasa a `streamlit run`). Con la API `st.Page` + `st.navigation` NO contiene contenido de página: ejecuta una sola vez `set_page_config`, `aplicar_tema()`, el arranque de la BD y el **único selector de idioma** (`selector_idioma_portada()`); luego construye el menú con los títulos traducidos (`TITULOS_PAGINAS[idioma_actual()]`) y ejecuta la página seleccionada (`pg.run()`). Se ejecuta en CADA rerun (es el marco común de todas las páginas).
+- `vistas/Inicio.py` — la **portada** (antes en `app.py`): logos, intro, tarjetas de acceso y el **selector de Plan global** (escribe en `st.session_state["_plan_id_actual"]`).
+- `vistas/N_*.py` — las cinco páginas funcionales. Viven en `vistas/` (NO en `pages/`, ver pitfall 4). Cada una llama a `asegurar_plan_id()` al inicio, lee el idioma con `idioma_actual()` y NO pinta su propio `set_page_config`/`aplicar_tema`/selector de idioma (lo hace el router).
+- `src/i18n.py` — diccionarios de traducción `T` + `TITULOS_PAGINAS` (títulos de página es/eu para el menú) + `selector_idioma_portada()` (único selector, en el router; `selector_idioma()` queda como alias deprecated) + `idioma_actual()` (idioma activo es/eu) + `selector_plan_portada()` + `asegurar_plan_id()`.
 - `src/tema.py` — `aplicar_tema()` con CSS verde institucional. Selectores específicos por clase `.st-key-bloque_*`.
 - `src/db.py` — acceso **agnóstico de motor** (SQLite o PostgreSQL). `get_conexion()` (alias `conectar()`) abre la conexión al motor activo; `P()` da el placeholder; `ejecutar()` e `insertar_devolver_id()` encapsulan diferencias entre motores; `inicializar_db()` crea el esquema correcto. Ver sección **Persistencia**.
-- `src/arranque.py` — `inicializar_si_necesario()`: en SQLite crea el esquema y carga los Excel de `datos/` si la BD está vacía. Lo llama `app.py` al arrancar. En PostgreSQL no hace nada.
+- `src/arranque.py` — `inicializar_si_necesario()`: en SQLite crea el esquema y carga los Excel de `datos/` si la BD está vacía. Lo llama el router `app.py` al arrancar. En PostgreSQL no hace nada.
 - `src/consultas.py` — funciones reutilizables para consultar planes, ámbitos, actuaciones, indicadores, seguimientos. Incluye `campos_bilingues()`, vía canónica para seleccionar textos de datos en el idioma activo con fallback (ver **Idioma y bilingüismo**).
 - `src/importador.py` — `cargar_plan_desde_excel()` y `exportar_plan_a_excel()`. Lo usan tanto el CLI como la página de Administración.
 - `db/schema_sqlite.sql` y `db/schema_postgres.sql` — mismo esquema en cada dialecto. Tablas: `planes`, `ambitos`, `responsables`, `actuaciones`, `actuacion_responsables`, `seguimientos`, `indicadores`, `indicador_valores`, `alertas` (esta última definida pero todavía no utilizada por la app). `db.py` elige el fichero según el motor activo.
@@ -141,9 +142,23 @@ Ver `selector_plan_portada()` en `src/i18n.py` como implementación de referenci
 
 `@st.cache_data` puede dejar resultados obsoletos tras modificar la BD (carga de plan, edición de actuaciones). Si se usa, invalidar tras escrituras o reiniciar el servidor.
 
-### 4. Multipágina y orden del sidebar
+### 4. Multipágina: `st.navigation` y carpeta `vistas/` (NO `pages/`)
 
-El orden del sidebar lo da el prefijo numérico del archivo en `pages/`. Para reordenar páginas hay que renombrar los ficheros (`1_X.py`, `2_Y.py`, etc.).
+La app usa la API moderna `st.Page` + `st.navigation` (Streamlit ≥ 1.36),
+montada en el router `app.py`. Las páginas viven en **`vistas/`**, NO en la
+carpeta mágica `pages/`: si estuvieran en `pages/`, Streamlit las autoañadiría
+al sidebar **además** del menú de `st.navigation`, duplicando la navegación.
+Por eso la carpeta se llama `vistas/`.
+
+- **Orden del menú**: lo da el ORDEN de la lista que se pasa a `st.navigation`
+  en `app.py`, no el nombre de fichero. Los prefijos numéricos (`1_`, `2_`…)
+  se conservan por familiaridad pero ya no determinan el orden. Para reordenar,
+  reordena la lista `paginas` en `app.py`.
+- **Títulos traducidos**: cada `st.Page(..., title=...)` toma el título del
+  idioma activo desde `TITULOS_PAGINAS[idioma_actual()]` en `src/i18n.py`. Al
+  cambiar de idioma en el sidebar, los nombres del menú cambian al instante.
+- **Enlaces internos**: `st.page_link("vistas/N_*.py", ...)` (la portada usa
+  estos para las tarjetas de acceso rápido).
 
 ---
 
@@ -219,7 +234,7 @@ en este orden:
      El placeholder es `?` (o `{P}`); `db.leer_df` lo traduce al motor activo.
      Las funciones de `src/consultas.py` que devuelven DataFrames
      (`resumen_por_ambito`, `resumen_indicadores`, `ultimos_movimientos`) y
-     `cargar()` en `pages/1_Vision_general.py` ya usan este helper.
+     `cargar()` en `vistas/1_Vision_general.py` ya usan este helper.
 
 ### Carga inicial
 
@@ -243,7 +258,7 @@ Copiar `.streamlit/secrets.toml.example` a `.streamlit/secrets.toml` y poner la
 - **Formato único**: `datos/Plan_Sectorial_<NOMBRE>.xlsx` con 8 hojas estandarizadas: Instrucciones, Plan, Ámbitos, Responsables, Actuaciones, Indicadores, Valores_indicadores, Seguimientos.
 - **Importar**: `cargar_plan_desde_excel(origen, reemplazar=False, dry_run=False)` en `src/importador.py`. Acepta path o bytes (para subidas desde Streamlit).
 - **Exportar**: `exportar_plan_a_excel(plan_id)` devuelve bytes listos para `st.download_button`.
-- **Dos clientes** de las mismas funciones: el script CLI `scripts/importar_plan.py` y la página `pages/5_Administracion.py`.
+- **Dos clientes** de las mismas funciones: el script CLI `scripts/importar_plan.py` y la página `vistas/5_Administracion.py`.
 - **Toda carga en una transacción**: rollback completo si falla cualquier paso.
 
 ---

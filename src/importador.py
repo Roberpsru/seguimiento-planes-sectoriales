@@ -4,7 +4,7 @@ estandarizado (`datos/Plan_Sectorial_<NOMBRE>.xlsx`).
 
 Esta capa la usan dos sitios:
   - `scripts/importar_plan.py` — envoltorio CLI fino.
-  - `pages/5_Administracion.py` — página de carga/descarga desde la UI.
+  - `vistas/5_Administracion.py` — página de carga/descarga desde la UI.
 
 API pública:
   - cargar_plan_desde_excel(origen, reemplazar=False, dry_run=False) -> dict

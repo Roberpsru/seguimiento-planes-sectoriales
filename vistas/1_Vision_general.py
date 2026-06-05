@@ -4,11 +4,11 @@ Seguimiento de Planes Sectoriales — Visión general por plan.
 Esta página muestra la visión general por plan (métricas, presupuesto por
 ámbito, listado de actuaciones e indicadores). La ENTRADA de datos se
 realiza desde la página "Gestión de actuaciones"
-(pages/2_Gestion_actuaciones.py), que comparte con esta los módulos
+(vistas/2_Gestion_actuaciones.py), que comparte con esta los módulos
 src/i18n.py y src/consultas.py.
 
-Antes vivía en la raíz como app.py; al añadir la portada se trasladó a
-pages/ y app.py pasó a ser la página de inicio.
+El idioma activo lo fija el selector global del router app.py; aquí solo se
+lee con idioma_actual(). set_page_config / tema los aplica el router.
 """
 import html
 import sys
@@ -19,15 +19,11 @@ import plotly.express as px
 import streamlit as st
 
 # Hacer accesibles los módulos compartidos en src/ (subimos dos niveles
-# porque ahora este fichero vive en pages/, no en la raíz).
+# porque este fichero vive en vistas/, no en la raíz).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import db  # noqa: E402
 import consultas  # noqa: E402
-from i18n import asegurar_plan_id, plan_actual, selector_idioma, textos  # noqa: E402
-from tema import aplicar_tema  # noqa: E402
-
-st.set_page_config(page_title="Planes Sectoriales", layout="wide")
-aplicar_tema()
+from i18n import asegurar_plan_id, idioma_actual, plan_actual, textos  # noqa: E402
 
 
 @st.cache_data
@@ -99,7 +95,7 @@ def cargar(plan_codigo, idioma):
 # --------------------------------------------------------------------------
 # Barra lateral: idioma + selector de plan globales (compartidos entre páginas)
 # --------------------------------------------------------------------------
-idioma = selector_idioma()
+idioma = idioma_actual()
 t = textos(idioma)
 plan_id = asegurar_plan_id()
 if plan_id is None:

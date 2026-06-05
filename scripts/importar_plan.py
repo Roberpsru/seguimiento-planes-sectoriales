@@ -4,7 +4,7 @@ CLI para cargar un Plan Sectorial desde un Excel con la plantilla estándar
 
 Es un envoltorio fino sobre `src/importador.cargar_plan_desde_excel`. La
 lógica de lectura, validación e inserción vive ahí, y se comparte con la
-página `pages/5_Administracion.py`.
+página `vistas/5_Administracion.py`.
 
 Uso:
     python scripts/importar_plan.py <ruta_excel> [--reemplazar] [--dry-run]

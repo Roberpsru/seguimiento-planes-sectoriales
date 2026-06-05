@@ -1,9 +1,11 @@
 """
 Tema visual de la aplicación: inyecta el CSS común a todas las páginas.
 
-Se llama a `aplicar_tema()` justo después de `st.set_page_config(...)` en
-`app.py` y en cada página dentro de `pages/`. Define una paleta sobria con
-acento verde y aplica estilos consistentes a títulos, métricas, tablas,
+Se llama a `aplicar_tema()` una sola vez, justo después de
+`st.set_page_config(...)`, en el router `app.py`. Como el router se ejecuta
+en cada rerun (antes de pintar la página seleccionada por st.navigation), el
+CSS queda aplicado a todas las páginas de `vistas/`. Define una paleta sobria
+con acento verde y aplica estilos consistentes a títulos, métricas, tablas,
 pestañas y botones.
 """
 import streamlit as st

@@ -11,8 +11,9 @@ Reúne en una sola pantalla, para el plan seleccionado:
     semáforo de avance.
   - Lista de los 10 últimos movimientos del histórico.
 
-Sigue el mismo patrón que el resto de páginas: set_page_config →
-aplicar_tema → selector_idioma → contenedores con key="bloque_*".
+Sigue el mismo patrón que el resto de páginas: el router app.py aplica
+set_page_config / tema / selector de idioma; aquí se lee el idioma con
+idioma_actual() y se pintan contenedores con key="bloque_*".
 """
 import html
 import sys
@@ -30,22 +31,15 @@ import consultas  # noqa: E402
 from i18n import (  # noqa: E402
     asegurar_plan_id,
     etiquetas_estado,
+    idioma_actual,
     plan_actual,
-    selector_idioma,
     textos,
 )
-from tema import aplicar_tema  # noqa: E402
-
-st.set_page_config(
-    page_title="Resumen del Plan",
-    layout="wide",
-)
-aplicar_tema()
 
 # --------------------------------------------------------------------------
-# Idioma y textos
+# Idioma y textos (el selector global vive en el router app.py)
 # --------------------------------------------------------------------------
-idioma = selector_idioma()
+idioma = idioma_actual()
 t = textos(idioma)
 plan_id = asegurar_plan_id()
 etiq_estado = etiquetas_estado(t)

@@ -3,9 +3,11 @@ Módulo de internacionalización (bilingüe es/eu).
 
 Contiene:
 - T: diccionario con todos los textos de interfaz por idioma.
-- selector_idioma(): pinta el radio en la barra lateral y guarda la
-  elección en st.session_state["idioma"], para que el idioma se mantenga
-  al cambiar de página.
+- TITULOS_PAGINAS: títulos de las páginas (es/eu) para el menú st.navigation.
+- selector_idioma_portada(): pinta el radio de idioma en el sidebar. Es el
+  ÚNICO selector de la app; vive en el router app.py y persiste la elección
+  en st.session_state["idioma"]. selector_idioma() queda como alias deprecated.
+- idioma_actual(): devuelve el idioma activo ('es'/'eu') leído de session_state.
 - textos(): devuelve el sub-diccionario T[idioma] del idioma activo.
 """
 import streamlit as st
@@ -524,23 +526,65 @@ def etiqueta_desde_fecha(fecha):
     return f"{MESES_ABREV_ES[fecha.month - 1]} {fecha.year}"
 
 
-def selector_idioma():
+def selector_idioma_portada():
     """
-    Pinta el radio de idioma en la barra lateral y persiste la elección
-    en st.session_state["idioma"] (por defecto "es"). Devuelve el código.
+    Pinta el radio de idioma en la barra lateral. Es el ÚNICO selector de
+    idioma de la app (vive en el router app.py, que se ejecuta en cada
+    rerun, por lo que el radio aparece en el sidebar de todas las páginas).
 
-    Usando key="idioma", Streamlit sincroniza el widget con session_state
-    y la elección se mantiene al navegar entre páginas.
+    Persiste la elección en st.session_state["idioma"] (por defecto "es").
+    Usando key="idioma", Streamlit sincroniza el widget con session_state y
+    la elección se mantiene al navegar entre páginas, igual que el plan.
+
+    La etiqueta del propio selector es bilingüe: "Idioma" en castellano,
+    "Hizkuntza" en euskera (t["idioma"] del idioma activo).
     """
     if "idioma" not in st.session_state:
         st.session_state["idioma"] = "es"
+    etiqueta = T[st.session_state["idioma"]]["idioma"]
     st.sidebar.radio(
-        "Idioma / Hizkuntza",
+        etiqueta,
         options=["es", "eu"],
         format_func=lambda x: "Castellano" if x == "es" else "Euskera",
         key="idioma",
     )
     return st.session_state["idioma"]
+
+
+def selector_idioma():
+    """[DEPRECATED] Alias de selector_idioma_portada().
+
+    Se conserva por seguridad para no romper imports antiguos. El selector
+    de idioma vive ahora SOLO en el router app.py vía selector_idioma_portada().
+    No usar en páginas nuevas: leer el idioma con idioma_actual().
+    """
+    return selector_idioma_portada()
+
+
+# --------------------------------------------------------------------------
+# Títulos de las páginas para el menú de navegación (st.navigation).
+# El sidebar de navegación se construye en app.py con st.Page(title=...),
+# tomando el título del idioma activo (idioma_actual()). Solo el idioma
+# activo se muestra (no bilingüe simultáneo), por decisión de diseño.
+# --------------------------------------------------------------------------
+TITULOS_PAGINAS = {
+    "es": {
+        "inicio": "Inicio",
+        "vision_general": "Visión general",
+        "gestion": "Gestión de actuaciones",
+        "indicadores": "Indicadores",
+        "resumen": "Resumen del Plan",
+        "administracion": "Administración",
+    },
+    "eu": {
+        "inicio": "Hasiera",
+        "vision_general": "Ikuspegi orokorra",
+        "gestion": "Jarduketen kudeaketa",
+        "indicadores": "Adierazleak",
+        "resumen": "Planaren laburpena",
+        "administracion": "Administrazioa",
+    },
+}
 
 
 def textos(idioma=None):

@@ -8,7 +8,7 @@ Flujo:
   4) Se consulta y se amplía la bitácora de seguimientos.
 
 Tras cualquier guardado se ejecuta st.cache_data.clear() para que la
-visión general (app.py) refleje los cambios.
+Visión general (vistas/1_Vision_general.py) refleje los cambios.
 """
 import re
 import sys
@@ -30,11 +30,10 @@ from i18n import (  # noqa: E402
     etiqueta_desde_fecha,
     etiquetas_estado,
     etiquetas_periodo,
+    idioma_actual,
     plan_actual,
-    selector_idioma,
     textos,
 )
-from tema import aplicar_tema  # noqa: E402
 
 
 # --------------------------------------------------------------------------
@@ -93,16 +92,10 @@ def recomponer_fecha(periodo, anio):
         return f"{periodo} {anio}"
     return None
 
-st.set_page_config(
-    page_title="Gestión de actuaciones",
-    layout="wide",
-)
-aplicar_tema()
-
 # --------------------------------------------------------------------------
-# Idioma y textos
+# Idioma y textos (el selector global vive en el router app.py)
 # --------------------------------------------------------------------------
-idioma = selector_idioma()
+idioma = idioma_actual()
 t = textos(idioma)
 plan_id = asegurar_plan_id()
 etiq_estado = etiquetas_estado(t)

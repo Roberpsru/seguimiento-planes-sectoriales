@@ -9,8 +9,9 @@ Permite:
   3) Registrar valores por año (2025-2028) con observaciones.
   4) Visualizar la evolución por año respecto a la meta.
 
-Sigue el mismo patrón que pages/1_Gestion_actuaciones.py:
-  - selector de idioma compartido (st.session_state["idioma"])
+Sigue el mismo patrón que vistas/2_Gestion_actuaciones.py:
+  - idioma activo compartido (st.session_state["idioma"], fijado por el
+    selector global del router app.py; aquí se lee con idioma_actual())
   - mensaje flash que sobrevive a st.rerun()
   - st.cache_data.clear() tras cada guardado
 """
@@ -25,14 +26,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import consultas  # noqa: E402
-from i18n import asegurar_plan_id, plan_actual, selector_idioma, textos  # noqa: E402
-from tema import aplicar_tema  # noqa: E402
-
-st.set_page_config(
-    page_title="Indicadores (KPI)",
-    layout="wide",
-)
-aplicar_tema()
+from i18n import asegurar_plan_id, idioma_actual, plan_actual, textos  # noqa: E402
 
 # Años de recogida de valores fijados por especificación.
 # El "periodo" en la BD es un TEXT libre; aquí usamos el año como string.
@@ -42,7 +36,7 @@ ANIOS_KPI = [2025, 2026, 2027, 2028]
 # --------------------------------------------------------------------------
 # Idioma y textos
 # --------------------------------------------------------------------------
-idioma = selector_idioma()
+idioma = idioma_actual()
 t = textos(idioma)
 plan_id = asegurar_plan_id()
 
