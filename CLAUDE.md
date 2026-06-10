@@ -311,6 +311,22 @@ Copiar `.streamlit/secrets.toml.example` a `.streamlit/secrets.toml` y poner la
 > Nota: la red de HAZI bloquea el puerto de Supabase. La prueba contra
 > PostgreSQL se hace desde Streamlit Cloud u otra red.
 
+### Seguridad: Row Level Security (RLS) en Supabase
+
+En Supabase está **activado RLS en todas las tablas del schema `public`**
+(`db/migracion_activar_rls.sql`, aplicado el 10/06/2026). Bloquea el acceso
+anónimo vía la API REST pública de Supabase. La app **no se ve afectada**:
+conecta directamente a PostgreSQL con el rol `postgres` (superusuario), que
+bypasea RLS por definición.
+
+> ⚠️ Si en el futuro se añade una tabla nueva al schema `public`, hay que
+> activar RLS también en ella (`ALTER TABLE public.<tabla> ENABLE ROW LEVEL
+> SECURITY;`) o el Security Advisor de Supabase volverá a marcar el aviso.
+
+Los ficheros `db/migracion_*.sql` son migraciones puntuales aplicadas a mano en
+el SQL Editor de Supabase (idempotentes cuando es posible). No los ejecuta la
+app; quedan versionados como registro histórico de cambios sobre la BD desplegada.
+
 ---
 
 ## Carga y exportación de planes
