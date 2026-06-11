@@ -558,3 +558,69 @@ def ultimos_movimientos(plan_id, limite=10):
         """,
         (plan_id, int(limite)),
     )
+
+
+# --------------------------------------------------------------------------
+# Coordinaciones (diario de coordinación por actuación)
+# --------------------------------------------------------------------------
+def anadir_coordinacion(actuacion_id, fecha, encargo_es, encargo_eu,
+                        gestor_es, gestor_eu, resultado_es, resultado_eu):
+    """Inserta un registro de coordinación para una actuación.
+
+    `fecha` debe llegar ya como texto ISO 'AAAA-MM-DD'. Los textos son
+    bilingües (es/eu) y pueden ser None. Placeholder '?' portable a ambos
+    motores (lo traduce db.py).
+    """
+    con = db.conectar()
+    try:
+        con.execute(
+            """
+            INSERT INTO coordinaciones
+                (actuacion_id, fecha,
+                 encargo_realizado_es, encargo_realizado_eu,
+                 gestor_operacion_es, gestor_operacion_eu,
+                 resultado_es, resultado_eu)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (actuacion_id, fecha,
+             encargo_es, encargo_eu,
+             gestor_es, gestor_eu,
+             resultado_es, resultado_eu),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def listar_coordinaciones(plan_id, idioma=None):
+    """
+    DataFrame con los registros de coordinación de un plan, ordenados por
+    fecha descendente:
+
+      fecha, act_codigo, actuacion_nombre, encargo, gestor, resultado
+
+    Los textos bilingües (nombre de la actuación, encargo, gestor y resultado)
+    se sirven en el idioma activo con fallback al otro, vía campos_bilingues.
+    `idioma` por defecto es el activo (i18n.idioma_actual()); va como argumento
+    para que, si la página cachea, el cambio de idioma invalide la caché.
+    """
+    sel = campos_bilingues(
+        [
+            ("ac.nombre", "actuacion_nombre"),
+            ("c.encargo_realizado", "encargo"),
+            ("c.gestor_operacion", "gestor"),
+            ("c.resultado", "resultado"),
+        ],
+        idioma,
+    )
+    return db.leer_df(
+        f"""
+        SELECT c.fecha, ac.codigo AS act_codigo, {sel}
+          FROM coordinaciones c
+          JOIN actuaciones ac ON c.actuacion_id = ac.id
+          JOIN ambitos am     ON ac.ambito_id   = am.id
+         WHERE am.plan_id = ?
+         ORDER BY c.fecha DESC, c.id DESC
+        """,
+        (plan_id,),
+    )

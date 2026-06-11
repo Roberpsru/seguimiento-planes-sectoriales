@@ -197,6 +197,22 @@ T = {
             "La base de datos está vacía. Sube un Excel de plan en el bloque "
             "siguiente para comenzar."
         ),
+        # ---- Administración: pestañas y Coordinación ----
+        "admin_tab_carga": "Carga y descarga de Planes",
+        "admin_tab_coordinacion": "Coordinación",
+        "coord_anadir_titulo": "Añadir registro de coordinación",
+        "coord_fecha": "Fecha",
+        "coord_encargo": "Encargo realizado",
+        "coord_gestor": "Gestor de la operación",
+        "coord_resultado": "Resultado",
+        "coord_suf_es": "castellano",
+        "coord_suf_eu": "euskera",
+        "coord_guardar": "Guardar registro",
+        "coord_guardado_ok": "Registro de coordinación añadido.",
+        "coord_validar_texto": "Rellena al menos uno de los campos de texto.",
+        "coord_registros_titulo": "Registros de coordinación",
+        "coord_col_actuacion": "Actuación",
+        "coord_sin_registros": "Aún no hay registros de coordinación para este plan.",
         # ---- Portada (app.py) ----
         "portada_titulo": "Seguimiento de Planes Sectoriales",
         "portada_selecciona_plan": "Selecciona el Plan Sectorial",
@@ -420,6 +436,23 @@ T = {
             "Datu-basea hutsik dago. Igo plan baten Excela beheko blokean "
             "hasteko."
         ),
+        # ---- Administrazioa: fitxak eta Koordinazioa ----
+        # NOTA: euskera en BORRADOR, pendiente de validar con comunicación de HAZI.
+        "admin_tab_carga": "Planen karga eta deskarga",
+        "admin_tab_coordinacion": "Koordinazioa",
+        "coord_anadir_titulo": "Koordinazio-erregistroa gehitu",
+        "coord_fecha": "Data",
+        "coord_encargo": "Egindako eskaera",
+        "coord_gestor": "Eragiketaren kudeatzailea",
+        "coord_resultado": "Emaitza",
+        "coord_suf_es": "gaztelaniaz",
+        "coord_suf_eu": "euskaraz",
+        "coord_guardar": "Erregistroa gorde",
+        "coord_guardado_ok": "Koordinazio-erregistroa gehitu da.",
+        "coord_validar_texto": "Bete testu-eremuetako bat gutxienez.",
+        "coord_registros_titulo": "Koordinazio-erregistroak",
+        "coord_col_actuacion": "Jarduketa",
+        "coord_sin_registros": "Plan honek ez du koordinazio-erregistrorik oraindik.",
         # ---- Azala (app.py) ----
         "portada_titulo": "Plan Sektorialen Jarraipena",
         "portada_selecciona_plan": "Aukeratu Plan Sektoriala",
