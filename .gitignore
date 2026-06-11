@@ -7,6 +7,12 @@ __pycache__/
 # Secretos (cadena de conexión a PostgreSQL, etc.). NO versionar.
 # El fichero de ejemplo .streamlit/secrets.toml.example SÍ se versiona.
 .streamlit/secrets.toml
+# Durante el desarrollo, secrets.toml se renombra a secrets.toml.PROD para que
+# la app local resuelva SQLite y ninguna prueba toque Supabase. También secreto.
+.streamlit/secrets.toml.PROD
+
+# Volcado de contexto del proyecto (se regenera; no versionar).
+CONTEXTO_PROYECTO.md
 
 # Base de datos local SQLite (se regenera desde datos/)
 db/seguimiento.db

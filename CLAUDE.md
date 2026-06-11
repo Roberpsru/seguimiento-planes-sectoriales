@@ -31,9 +31,15 @@ Pensada para **uso interno** (departamento + HAZI + diputaciones forales). Multi
 
 Los textos de datos viven en columnas paralelas `<campo>_es` / `<campo>_eu`
 (ej. `nombre_es`/`nombre_eu`, `objetivo_macro_es`/`objetivo_macro_eu`,
-`detalle_es`/`detalle_eu`, `meta_es`/`meta_eu`, `valor_texto_es`/`valor_texto_eu`).
-El bug histórico fue que el SQL **fijaba siempre `_es`**, así que al cambiar a
-euskera la UI estática cambiaba pero los datos seguían en castellano.
+`detalle_es`/`detalle_eu`, `meta_es`/`meta_eu`, `valor_texto_es`/`valor_texto_eu`,
+y en `coordinaciones`: `encargo_realizado_es/_eu`, `gestor_operacion_es/_eu`,
+`resultado_es/_eu`). El bug histórico fue que el SQL **fijaba siempre `_es`**, así
+que al cambiar a euskera la UI estática cambiaba pero los datos seguían en
+castellano.
+
+> En `coordinaciones`, `fecha` NO es bilingüe (es ISO `AAAA-MM-DD`); solo lo son
+> encargo/gestor/resultado, que se mostrarán con `campos_bilingues`/`_nombre`
+> cuando se construya su vista (aún no hay UI para coordinaciones).
 
 **Fuente única del idioma activo**: `i18n.idioma_actual()` → `'es'` / `'eu'`
 (lee `st.session_state["idioma"]`; `'es'` por defecto y fuera de Streamlit).
@@ -107,7 +113,8 @@ Sitios donde hoy se aplica `traducir_categoria`: selector "Tipo" y ficha en
 - `src/arranque.py` — `inicializar_si_necesario()`: en SQLite crea el esquema y carga los Excel de `datos/` si la BD está vacía. Lo llama el router `app.py` al arrancar. En PostgreSQL no hace nada.
 - `src/consultas.py` — funciones reutilizables para consultar planes, ámbitos, actuaciones, indicadores, seguimientos. Incluye `campos_bilingues()`, vía canónica para seleccionar textos de datos en el idioma activo con fallback (ver **Idioma y bilingüismo**).
 - `src/importador.py` — `cargar_plan_desde_excel()` y `exportar_plan_a_excel()`. Lo usan tanto el CLI como la página de Administración.
-- `db/schema_sqlite.sql` y `db/schema_postgres.sql` — mismo esquema en cada dialecto. Tablas: `planes`, `ambitos`, `responsables`, `actuaciones`, `actuacion_responsables`, `seguimientos`, `indicadores`, `indicador_valores`, `alertas` (esta última definida pero todavía no utilizada por la app). `db.py` elige el fichero según el motor activo.
+- `db/schema_sqlite.sql` y `db/schema_postgres.sql` — mismo esquema en cada dialecto. Tablas: `planes`, `ambitos`, `responsables`, `actuaciones`, `actuacion_responsables`, `seguimientos`, `coordinaciones`, `indicadores`, `indicador_valores`, `alertas` (esta última definida pero todavía no utilizada por la app). `db.py` elige el fichero según el motor activo.
+  - `coordinaciones` — diario de coordinación por actuación (1:N con `actuaciones`, `ON DELETE CASCADE`). Columnas: `fecha` (ISO `AAAA-MM-DD`, **obligatoria**, no bilingüe), `encargo_realizado_es/_eu`, `gestor_operacion_es/_eu`, `resultado_es/_eu` (datos **bilingües**) y `fecha_registro`. La descripción de la actuación NO se almacena aquí: se obtiene por JOIN (se usa `objetivo_impacto_es/_eu`). La alimenta la hoja "Coordinación" del Excel; en Supabase se creó con `db/migracion_coordinacion.sql` (con RLS activado).
 - `documentos/` — manuales de usuario y plantilla en blanco (Guia_de_uso.docx, Guia_de_carga_de_planes.docx, Plantilla_Plan_Sectorial.xlsx). Material de consulta humana; no se procesa por código.
 
 ---
@@ -311,6 +318,23 @@ Copiar `.streamlit/secrets.toml.example` a `.streamlit/secrets.toml` y poner la
 > Nota: la red de HAZI bloquea el puerto de Supabase. La prueba contra
 > PostgreSQL se hace desde Streamlit Cloud u otra red.
 
+### ⚠️ Pruebas y secretos (regla obligatoria)
+
+- **Las pruebas locales se hacen SIEMPRE contra SQLite.** Durante el desarrollo,
+  `.streamlit/secrets.toml` está **renombrado a `.streamlit/secrets.toml.PROD`**
+  para que `db.py` resuelva SQLite (`db/seguimiento.db`) y ninguna prueba ni
+  script toque Supabase por accidente. Solo se restaura (`secrets.toml.PROD` →
+  `secrets.toml`) para **desplegar** o para una **operación deliberada contra
+  Supabase**, y se **vuelve a renombrar** a `.PROD` nada más terminar.
+  > Aprendido a las malas: con `secrets.toml` presente, `db._resolver_motor()`
+  > elige PostgreSQL y `db.inicializar_db()` se ejecuta contra Supabase (creó
+  > una tabla en producción durante un test). Tanto `secrets.toml` como
+  > `secrets.toml.PROD` están en `.gitignore` (contienen credenciales).
+- **NUNCA imprimir `DATABASE_URL` ni ningún secreto** (contraseñas, tokens,
+  cadenas de conexión) en logs, salidas de consola ni mensajes. Si necesitas
+  confirmar el motor activo, imprime solo `db.MOTOR_BD` (`'sqlite'`/`'postgres'`),
+  nunca la URL.
+
 ### Seguridad: Row Level Security (RLS) en Supabase
 
 En Supabase está **activado RLS en todas las tablas del schema `public`**
@@ -322,6 +346,8 @@ bypasea RLS por definición.
 > ⚠️ Si en el futuro se añade una tabla nueva al schema `public`, hay que
 > activar RLS también en ella (`ALTER TABLE public.<tabla> ENABLE ROW LEVEL
 > SECURITY;`) o el Security Advisor de Supabase volverá a marcar el aviso.
+> Ejemplo aplicado: `db/migracion_coordinacion.sql` crea la tabla
+> `coordinaciones` y activa su RLS en el mismo fichero.
 
 Los ficheros `db/migracion_*.sql` son migraciones puntuales aplicadas a mano en
 el SQL Editor de Supabase (idempotentes cuando es posible). No los ejecuta la
@@ -331,7 +357,8 @@ app; quedan versionados como registro histórico de cambios sobre la BD desplega
 
 ## Carga y exportación de planes
 
-- **Formato único**: `datos/Plan_Sectorial_<NOMBRE>.xlsx` con 8 hojas estandarizadas: Instrucciones, Plan, Ámbitos, Responsables, Actuaciones, Indicadores, Valores_indicadores, Seguimientos.
+- **Formato único**: `datos/Plan_Sectorial_<NOMBRE>.xlsx` con 9 hojas estandarizadas: Instrucciones, Plan, Ámbitos, Responsables, Actuaciones, Indicadores, Valores_indicadores, Seguimientos, Coordinación.
+- **Hoja "Coordinación"** (cabeceras bilingües en dos líneas, como Seguimientos): se liga por `Código actuación` (debe existir); `Fecha` es obligatoria y se valida como ISO. Las dos columnas de **descripción son informativas** (se ignoran al importar; al exportar se rellenan con la descripción de la actuación, `objetivo_impacto_es/_eu`). Es una hoja **opcional al importar**: los Excel antiguos sin ella siguen cargando. El **euskera de las etiquetas nuevas** (Fecha, Encargo realizado, Gestor operación, Resultado) es **BORRADOR**, pendiente de validar con el equipo de comunicación de HAZI.
 - **Importar**: `cargar_plan_desde_excel(origen, reemplazar=False, dry_run=False)` en `src/importador.py`. Acepta path o bytes (para subidas desde Streamlit).
 - **Exportar**: `exportar_plan_a_excel(plan_id)` devuelve bytes listos para `st.download_button`.
 - **Dos clientes** de las mismas funciones: el script CLI `scripts/importar_plan.py` y la página `vistas/5_Administracion.py`.
@@ -348,6 +375,7 @@ app; quedan versionados como registro histórico de cambios sobre la BD desplega
 - **Seguimiento (anotación)**: corte temporal con fecha, estado y observaciones. Cada actuación acumula un historial; no se sobreescriben anotaciones previas.
 - **Indicador (KPI)**: métrica numérica con meta, unidad y valores anuales. Asociado al plan, no a una actuación concreta.
 - **Responsable**: organización o persona a cargo de una actuación. Códigos habituales: GV, HAZI, NEIKER, DDFF, DFA, DFB, DFG, SECTOR.
+- **Coordinación**: anotación fechada del trabajo de coordinación de una actuación (encargo realizado, gestor de la operación y resultado). Diario 1:N por actuación, como los seguimientos; tabla `coordinaciones`.
 
 ---
 

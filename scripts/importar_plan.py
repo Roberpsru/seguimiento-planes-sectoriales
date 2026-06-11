@@ -35,7 +35,8 @@ def _imprimir_resumen(result, dry_run):
             f"Actuaciones: {r['actuaciones']} | "
             f"Indicadores: {r['indicadores']} | "
             f"Valores: {r['valores']} | "
-            f"Seguimientos: {r['seguimientos']}"
+            f"Seguimientos: {r['seguimientos']} | "
+            f"Coordinaciones: {r.get('coordinaciones', 0)}"
         )
 
     print("[OK] Validando ...")

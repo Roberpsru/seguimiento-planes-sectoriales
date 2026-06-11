@@ -152,6 +152,27 @@ CREATE TABLE IF NOT EXISTS indicador_valores (
 );
 
 -- ---------------------------------------------------------------------
+-- COORDINACIONES: diario de coordinación por actuación
+--   (qué encargo se hizo, quién gestiona la operación y con qué resultado).
+--   1:N con actuaciones. La descripción de la actuación NO se almacena aquí:
+--   se obtiene por JOIN. Los textos de datos son bilingües (_es / _eu);
+--   fecha es ISO 'AAAA-MM-DD' y obligatoria (dato de justificación).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS coordinaciones (
+    id                   SERIAL PRIMARY KEY,
+    actuacion_id         INTEGER NOT NULL,
+    fecha                TEXT NOT NULL,             -- ISO 'AAAA-MM-DD' (obligatoria)
+    encargo_realizado_es TEXT,
+    encargo_realizado_eu TEXT,
+    gestor_operacion_es  TEXT,
+    gestor_operacion_eu  TEXT,
+    resultado_es         TEXT,
+    resultado_eu         TEXT,
+    fecha_registro       TIMESTAMP DEFAULT now(),
+    FOREIGN KEY (actuacion_id) REFERENCES actuaciones(id) ON DELETE CASCADE
+);
+
+-- ---------------------------------------------------------------------
 -- ALERTAS manuales (la app aún no las usa)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS alertas (
@@ -175,3 +196,4 @@ CREATE INDEX IF NOT EXISTS idx_actuaciones_ambito  ON actuaciones(ambito_id);
 CREATE INDEX IF NOT EXISTS idx_seguimientos_act    ON seguimientos(actuacion_id);
 CREATE INDEX IF NOT EXISTS idx_indicadores_plan    ON indicadores(plan_id);
 CREATE INDEX IF NOT EXISTS idx_indvalores_ind      ON indicador_valores(indicador_id);
+CREATE INDEX IF NOT EXISTS idx_coordinaciones_act  ON coordinaciones(actuacion_id);

@@ -125,6 +125,27 @@ _HOJAS = {
         ],
         "anchos": {1: 16, 2: 14, 3: 12, 4: 14, 5: 18, 6: 16, 7: 16, 8: 50, 9: 50},
     },
+    # NOTA: el euskera de las etiquetas NUEVAS de esta hoja (Fecha, Encargo
+    # realizado, Gestor operación, Resultado) es BORRADOR, pendiente de validar
+    # con el equipo de comunicación de HAZI. La descripción es informativa (se
+    # ignora al importar; se rellena desde la actuación al exportar).
+    "Coordinación": {
+        "titulo_cols": 10,
+        "cabeceras": [
+            "Fecha *\nData *",
+            "Código actuación *\nJarduketaren kodea *",
+            "Descripción castellano\nGaztelaniazko deskribapena",
+            "Descripción euskera\nEuskarazko deskribapena",
+            "Encargo realizado castellano\nEgindako eskaera (gaztelaniaz)",
+            "Encargo realizado euskera\nEgindako eskaera (euskaraz)",
+            "Gestor operación castellano\nEragiketaren kudeatzailea (gaztelaniaz)",
+            "Gestor operación euskera\nEragiketaren kudeatzailea (euskaraz)",
+            "Resultado castellano\nEmaitza (gaztelaniaz)",
+            "Resultado euskera\nEmaitza (euskaraz)",
+        ],
+        "anchos": {1: 14, 2: 18, 3: 40, 4: 40, 5: 32, 6: 32,
+                   7: 26, 8: 26, 9: 40, 10: 40},
+    },
 }
 
 
@@ -464,14 +485,43 @@ def _leer_excel(origen):
         }
         seguimientos.append(s)
 
+    # ---- Coordinación (hoja OPCIONAL: los Excel antiguos no la tienen) ----
+    # Las dos columnas de descripción son INFORMATIVAS y NO se leen: se obtienen
+    # de la actuación por JOIN al exportar. La fecha se lee CRUDA (sin _fecha_iso)
+    # para poder reportar una incidencia limpia en _validar, en vez de un crash
+    # de lectura (_fecha_iso lanza ValueError con texto no reconocible).
+    coordinaciones = []
+    try:
+        ws = _hoja(wb, "Coordinación")
+    except ValueError:
+        ws = None
+    if ws is not None:
+        mapa, fcab = _mapa_cabeceras(ws)
+        for fila in _filas_datos_cab(ws, fcab):
+            cod = _val(fila, mapa, ["codigo actuacion", "codigo"])
+            if not cod or cod.startswith("("):
+                continue
+            c = {
+                "actuacion_cod": cod,
+                "fecha":         _val(fila, mapa, ["fecha"], lambda x: x),
+                "encargo_es":    _val(fila, mapa, ["encargo realizado castellano", "encargo realizado"]),
+                "encargo_eu":    _val(fila, mapa, ["encargo realizado euskera", "encargo realizado eu"]),
+                "gestor_es":     _val(fila, mapa, ["gestor operacion castellano", "gestor operacion"]),
+                "gestor_eu":     _val(fila, mapa, ["gestor operacion euskera", "gestor operacion eu"]),
+                "resultado_es":  _val(fila, mapa, ["resultado castellano", "resultado"]),
+                "resultado_eu":  _val(fila, mapa, ["resultado euskera", "resultado eu"]),
+            }
+            coordinaciones.append(c)
+
     return {
-        "plan":         plan,
-        "ambitos":      ambitos,
-        "responsables": responsables,
-        "actuaciones":  actuaciones,
-        "indicadores":  indicadores,
-        "valores":      valores,
-        "seguimientos": seguimientos,
+        "plan":          plan,
+        "ambitos":       ambitos,
+        "responsables":  responsables,
+        "actuaciones":   actuaciones,
+        "indicadores":   indicadores,
+        "valores":       valores,
+        "seguimientos":  seguimientos,
+        "coordinaciones": coordinaciones,
     }
 
 
@@ -569,6 +619,28 @@ def _validar(datos):
                 f"Seguimientos (fila {fila_real}, '{s['actuacion_cod']}'): "
                 f"fecha inicio real posterior a fecha fin real."
             )
+
+    for offset, c in enumerate(datos["coordinaciones"]):
+        fila_real = offset + 4
+        if c["actuacion_cod"] not in cod_actuaciones:
+            err.append(
+                f"Coordinación (fila {fila_real}): actuación "
+                f"'{c['actuacion_cod']}' no existe."
+            )
+        # Fecha obligatoria y en formato reconocible (se guardará como ISO).
+        if not c["fecha"]:
+            err.append(
+                f"Coordinación (fila {fila_real}, '{c['actuacion_cod']}'): "
+                f"falta la fecha (obligatoria)."
+            )
+        else:
+            try:
+                _fecha_iso(c["fecha"])
+            except ValueError:
+                err.append(
+                    f"Coordinación (fila {fila_real}, '{c['actuacion_cod']}'): "
+                    f"fecha no reconocida ({c['fecha']!r})."
+                )
 
     return err
 
@@ -725,6 +797,23 @@ def _insertar(con, datos):
              s["presupuesto_ejec"]),
         )
 
+    for c in datos["coordinaciones"]:
+        act_id = map_actuaciones[c["actuacion_cod"]]
+        # La fecha ya pasó _validar -> _fecha_iso no lanza aquí.
+        fecha_iso = _fecha_iso(c["fecha"])
+        con.execute(
+            """INSERT INTO coordinaciones
+                   (actuacion_id, fecha,
+                    encargo_realizado_es, encargo_realizado_eu,
+                    gestor_operacion_es, gestor_operacion_eu,
+                    resultado_es, resultado_eu)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (act_id, fecha_iso,
+             c["encargo_es"], c["encargo_eu"],
+             c["gestor_es"], c["gestor_eu"],
+             c["resultado_es"], c["resultado_eu"]),
+        )
+
     return plan_id
 
 
@@ -783,6 +872,7 @@ def cargar_plan_desde_excel(origen, reemplazar=False, dry_run=False):
     resumen_vacio = {
         "ambitos": 0, "actuaciones": 0, "responsables": 0,
         "indicadores": 0, "valores": 0, "seguimientos": 0,
+        "coordinaciones": 0,
     }
     base = {
         "ok": False,
@@ -808,12 +898,13 @@ def cargar_plan_desde_excel(origen, reemplazar=False, dry_run=False):
     base["plan_codigo"] = plan["codigo"] or ""
     base["plan_nombre"] = plan["nombre_es"] or ""
     base["resumen"] = {
-        "ambitos":      len(datos["ambitos"]),
-        "actuaciones":  len(datos["actuaciones"]),
-        "responsables": len(datos["responsables"]),
-        "indicadores":  len(datos["indicadores"]),
-        "valores":      len(datos["valores"]),
-        "seguimientos": len(datos["seguimientos"]),
+        "ambitos":       len(datos["ambitos"]),
+        "actuaciones":   len(datos["actuaciones"]),
+        "responsables":  len(datos["responsables"]),
+        "indicadores":   len(datos["indicadores"]),
+        "valores":       len(datos["valores"]),
+        "seguimientos":  len(datos["seguimientos"]),
+        "coordinaciones": len(datos["coordinaciones"]),
     }
 
     # 2) Validar
@@ -1028,6 +1119,20 @@ def exportar_plan_a_excel(plan_id):
                 ORDER BY s.fecha_corte DESC, s.id DESC""",
             (plan_id,),
         ).fetchall()]
+
+        # La descripción se obtiene de la actuación por JOIN (no se almacena en
+        # coordinaciones): se usa objetivo_impacto_es/eu, lo que el importador de
+        # Actuaciones recibe como "Descripción castellano/euskera".
+        coordinaciones = [dict(r) for r in con.execute(
+            """SELECT c.*, ac.codigo AS act_codigo,
+                      ac.objetivo_impacto_es, ac.objetivo_impacto_eu
+                 FROM coordinaciones c
+                 JOIN actuaciones ac ON c.actuacion_id = ac.id
+                 JOIN ambitos am     ON ac.ambito_id   = am.id
+                WHERE am.plan_id = ?
+                ORDER BY c.fecha DESC, c.id DESC""",
+            (plan_id,),
+        ).fetchall()]
     finally:
         con.close()
 
@@ -1186,6 +1291,28 @@ def exportar_plan_a_excel(plan_id):
         ws.cell(row=fila_excel, column=7, value=None)
         ws.cell(row=fila_excel, column=8, value=s["detalle_es"])
         ws.cell(row=fila_excel, column=9, value=s.get("detalle_eu"))
+        fila_excel += 1
+
+    # ---- Coordinación ----
+    # Las columnas de descripción (3/4) se rellenan con la descripción de la
+    # actuación (objetivo_impacto_es/eu) para referencia; al reimportar se
+    # ignoran. El euskera de las etiquetas nuevas es BORRADOR (ver _HOJAS).
+    ws = _crear_hoja(wb, "Coordinación", "Coordinación")
+    fila_excel = 4
+    for c in coordinaciones:
+        f_coord = _fecha_iso_a_date(c["fecha"])
+        ws.cell(row=fila_excel, column=1, value=f_coord or c["fecha"])
+        if isinstance(f_coord, (date, datetime)):
+            ws.cell(row=fila_excel, column=1).number_format = "DD/MM/YYYY"
+        ws.cell(row=fila_excel, column=2, value=c["act_codigo"])
+        ws.cell(row=fila_excel, column=3, value=c.get("objetivo_impacto_es"))
+        ws.cell(row=fila_excel, column=4, value=c.get("objetivo_impacto_eu"))
+        ws.cell(row=fila_excel, column=5, value=c["encargo_realizado_es"])
+        ws.cell(row=fila_excel, column=6, value=c["encargo_realizado_eu"])
+        ws.cell(row=fila_excel, column=7, value=c["gestor_operacion_es"])
+        ws.cell(row=fila_excel, column=8, value=c["gestor_operacion_eu"])
+        ws.cell(row=fila_excel, column=9, value=c["resultado_es"])
+        ws.cell(row=fila_excel, column=10, value=c["resultado_eu"])
         fila_excel += 1
 
     # Volcado a bytes.
