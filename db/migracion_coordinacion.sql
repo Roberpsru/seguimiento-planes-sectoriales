@@ -17,7 +17,7 @@
 --  Idempotente: CREATE TABLE / INDEX IF NOT EXISTS. ENABLE ROW LEVEL SECURITY
 --    es idempotente (re-activarlo no da error).
 --
---  Aplicado en Supabase el ____/____/______ (rellenar al ejecutar).
+--  Aplicado en Supabase el 11/06/2026 (tabla creada + RLS activo, verificado).
 --
 --  Cómo aplicarlo en Supabase:
 --    1. Abre el proyecto en Supabase -> "SQL Editor".
