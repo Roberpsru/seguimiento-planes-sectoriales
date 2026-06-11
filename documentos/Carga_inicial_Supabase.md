@@ -73,8 +73,9 @@ y comprobar que la conexión funciona:
 python -m src.db
 ```
 
-Debe imprimir `Base de datos lista (postgres): postgresql://...`. Si falla aquí,
-es conexión (red/cadena/SSL), no datos.
+Debe imprimir `Base de datos lista. Motor de BD: postgres` (no se muestra la
+cadena de conexión, por seguridad). Si falla aquí, es conexión
+(red/cadena/SSL), no datos.
 
 ## 4. Cargar los dos planes
 

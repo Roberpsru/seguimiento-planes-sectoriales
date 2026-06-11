@@ -294,8 +294,13 @@ def inicializar_db():
     finally:
         con.close()
 
-    destino = DATABASE_URL if MOTOR_BD == "postgres" else DB_PATH
-    print(f"Base de datos lista ({MOTOR_BD}): {destino}")
+    # NUNCA imprimir DATABASE_URL ni la cadena de conexión (contiene
+    # credenciales y host). En SQLite mostramos la ruta del fichero local
+    # (sin secretos); en PostgreSQL solo el nombre del motor.
+    if MOTOR_BD == "postgres":
+        print("Base de datos lista. Motor de BD: postgres")
+    else:
+        print(f"Base de datos lista. Motor de BD: sqlite ({DB_PATH})")
 
 
 if __name__ == "__main__":
