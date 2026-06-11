@@ -527,23 +527,26 @@ def resumen_indicadores(plan_id):
     return df
 
 
-def ultimos_movimientos(plan_id, limite=10):
+def listar_movimientos(plan_id, idioma=None, limite=None):
     """
-    DataFrame con los últimos N movimientos del histórico (seguimientos)
-    de un plan, ordenados por fecha de corte descendente:
+    DataFrame con los movimientos del histórico (seguimientos) de un plan,
+    ordenados por fecha de corte descendente:
 
       fecha_corte, etiqueta_corte, actuacion_nombre, ambito_nombre,
       estado, detalle
+
+    `idioma` se pasa a campos_bilingues (regla de caché bilingüe). `limite`
+    None devuelve TODOS los movimientos; un entero aplica LIMIT.
     """
     campos = campos_bilingues(
         [
             ("ac.nombre", "actuacion_nombre"),
             ("am.nombre", "ambito_nombre"),
             ("s.detalle", "detalle"),
-        ]
+        ],
+        idioma,
     )
-    return db.leer_df(
-        f"""
+    sql = f"""
         SELECT
             s.fecha_corte,
             s.etiqueta_corte,
@@ -554,10 +557,17 @@ def ultimos_movimientos(plan_id, limite=10):
         JOIN ambitos     am ON ac.ambito_id = am.id
         WHERE am.plan_id = ?
         ORDER BY s.fecha_corte DESC, s.id DESC
-        LIMIT ?
-        """,
-        (plan_id, int(limite)),
-    )
+    """
+    params = [plan_id]
+    if limite is not None:
+        sql += " LIMIT ?"
+        params.append(int(limite))
+    return db.leer_df(sql, tuple(params))
+
+
+def ultimos_movimientos(plan_id, limite=10):
+    """[compat] Últimos `limite` movimientos. Alias de listar_movimientos()."""
+    return listar_movimientos(plan_id, limite=limite)
 
 
 # --------------------------------------------------------------------------
@@ -606,6 +616,7 @@ def listar_coordinaciones(plan_id, idioma=None):
     """
     sel = campos_bilingues(
         [
+            ("am.nombre", "ambito_nombre"),
             ("ac.nombre", "actuacion_nombre"),
             ("c.encargo_realizado", "encargo"),
             ("c.gestor_operacion", "gestor"),
@@ -615,7 +626,12 @@ def listar_coordinaciones(plan_id, idioma=None):
     )
     return db.leer_df(
         f"""
-        SELECT c.fecha, ac.codigo AS act_codigo, {sel}
+        SELECT c.fecha,
+               am.id     AS ambito_id,
+               am.codigo AS ambito_codigo,
+               ac.id     AS actuacion_id,
+               ac.codigo AS act_codigo,
+               {sel}
           FROM coordinaciones c
           JOIN actuaciones ac ON c.actuacion_id = ac.id
           JOIN ambitos am     ON ac.ambito_id   = am.id

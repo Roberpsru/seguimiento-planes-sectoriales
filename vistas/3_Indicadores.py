@@ -1,37 +1,37 @@
 """
-Página de SEGUIMIENTO DE INDICADORES (KPI).
+Página de SEGUIMIENTO DE INDICADORES (KPI) — edición.
 
 Permite:
   1) Consultar la ficha del indicador (categoría, definición, meta textual,
      desarrollo y unidad).
-  2) Editar la meta numérica (meta_valor) para usarla como línea de
-     objetivo en los gráficos.
+  2) Editar la meta numérica (meta_valor) para usarla como línea de objetivo.
   3) Registrar valores por año (2025-2028) con observaciones.
   4) Visualizar la evolución por año respecto a la meta.
 
-Sigue el mismo patrón que vistas/2_Gestion_actuaciones.py:
-  - idioma activo compartido (st.session_state["idioma"], fijado por el
-    selector global del router app.py; aquí se lee con idioma_actual())
-  - mensaje flash que sobrevive a st.rerun()
-  - st.cache_data.clear() tras cada guardado
+El selector de Tipo→Indicador, la ficha y el gráfico viven en
+`src/componentes_kpi.py` (solo lectura) y se comparten con la pestaña
+"Cuadro de indicadores" de Resumen del Plan. Esta página AÑADE los dos
+formularios de edición (meta numérica y valores anuales).
+
+Patrón común con el resto de páginas: idioma activo (idioma_actual()), mensaje
+flash que sobrevive a st.rerun() y st.cache_data.clear() tras cada guardado.
 """
 import sys
 from pathlib import Path
 
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 
 # Hacer accesibles los módulos compartidos en src/
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import componentes_kpi as ckpi  # noqa: E402
 import consultas  # noqa: E402
 from i18n import (  # noqa: E402
     asegurar_plan_id,
     idioma_actual,
     plan_actual,
     textos,
-    traducir_categoria,
 )
 
 # Años de recogida de valores fijados por especificación.
@@ -69,27 +69,6 @@ def _nombre(item, campo_es, campo_eu):
     return item.get(campo_es, "") or ""
 
 
-# Filtro por tipo (categoría). Orden fijo solicitado y, después,
-# cualquier categoría no prevista por orden alfabético.
-_ORDEN_CATEGORIAS = ["Resultado / Impacto", "Ejecución", "Apoyo y seguimiento"]
-
-
-def _ordenar_categorias(cats):
-    """Coloca primero las categorías canónicas (en su orden fijo) y al final
-    cualquier otra encontrada, alfabéticamente."""
-    en_orden = [c for c in _ORDEN_CATEGORIAS if c in cats]
-    resto = sorted(c for c in cats if c not in _ORDEN_CATEGORIAS)
-    return en_orden + resto
-
-
-def _etiqueta_indicador(ind):
-    """Devuelve «N. nombre» (sin categoría: ya está filtrada arriba)."""
-    num = ind.get("numero")
-    num_txt = f"{num}." if num is not None else ""
-    nombre = _nombre(ind, "nombre_es", "nombre_eu")
-    return f"{num_txt} {nombre}".strip()
-
-
 # --------------------------------------------------------------------------
 # 1) Selección Tipo → Indicador (tarjeta "Filtros").
 #    El Plan se elige en la portada y vive en st.session_state["_plan_id_actual"].
@@ -101,67 +80,17 @@ plan = plan_actual()
 
 with st.container(border=True, key="bloque_filtros_kpi"):
     st.markdown(f"### {t['filtros']}")
+    ind = ckpi.selector_categoria_indicador(plan, t, idioma, key_prefix="kpi")
 
-    categorias_plan = _ordenar_categorias(consultas.listar_categorias(plan["id"]))
-    # None = "Todas" (sin filtro)
-    opciones_categoria = [None] + categorias_plan
-
-    # Clave dependiente del plan: al cambiar de plan, el widget se reinicia a
-    # "Todas" en vez de quedarse pillado con una categoría del plan anterior.
-    # Las options del filtro de Tipo son los valores castellanos de BD (fuente
-    # de verdad, sin columna _eu); format_func los traduce a la pantalla con
-    # traducir_categoria. None = "Todas". key estable por plan.
-    categoria_sel = st.selectbox(
-        t["tipo_indicador"],
-        options=opciones_categoria,
-        format_func=lambda c: t["todas"] if c is None else traducir_categoria(c, idioma),
-        key=f"cat_kpi_{plan['id']}",
-    )
-
-    indicadores = consultas.listar_indicadores(plan["id"], categoria_sel)
-    if not indicadores:
-        st.info(t["sin_indicadores"])
-        st.stop()
-
-    # Patrón canónico: options = IDs estables; el nombre traducido lo pinta
-    # format_func. Clave dependiente del plan y de la categoría: al cambiar
-    # cualquiera de los dos filtros, el selector se reinicia al primero de la
-    # nueva lista; al cambiar solo el idioma, la selección se mantiene.
-    indicadores_por_id = {i["id"]: i for i in indicadores}
-    ind_id = st.selectbox(
-        t["selecciona_indicador"],
-        options=[i["id"] for i in indicadores],
-        format_func=lambda i: _etiqueta_indicador(indicadores_por_id[i]),
-        key=f"ind_kpi_{plan['id']}_{categoria_sel or 'TODAS'}",
-    )
-
-# Relectura tras posibles guardados (para que la ficha refleje meta_valor
-# actualizada sin esperar a un cambio de plan).
-ind = consultas.obtener_indicador(ind_id)
+if ind is None:
+    # El plan no tiene indicadores (el selector ya mostró el aviso).
+    st.stop()
 
 # --------------------------------------------------------------------------
-# 2) Ficha del indicador (tarjeta: lectura + edición de meta numérica)
+# 2) Ficha del indicador (solo lectura) + edición de la meta numérica
 # --------------------------------------------------------------------------
 with st.container(border=True, key="bloque_ficha"):
-    st.markdown(f"### {t['ficha_indicador']}")
-
-    c1, c2 = st.columns([1, 3])
-    with c1:
-        st.markdown(f"**{t['categoria_kpi']}**")
-        st.write(traducir_categoria(ind.get("categoria"), idioma) or "—")
-        if ind.get("unidad"):
-            st.markdown(f"**{t['unidad']}**")
-            st.write(ind["unidad"])
-    with c2:
-        if ind.get("definicion_es") or ind.get("definicion_eu"):
-            st.markdown(f"**{t['definicion']}**")
-            st.write(_nombre(ind, "definicion_es", "definicion_eu"))
-        if ind.get("meta_es") or ind.get("meta_eu"):
-            st.markdown(f"**{t['meta_texto']}**")
-            st.write(_nombre(ind, "meta_es", "meta_eu"))
-        if ind.get("desarrollo_es") or ind.get("desarrollo_eu"):
-            st.markdown(f"**{t['desarrollo']}**")
-            st.write(_nombre(ind, "desarrollo_es", "desarrollo_eu"))
+    ckpi.ficha_indicador(ind, t, idioma)
 
     # Edición de la meta numérica (formulario independiente para guardar solo eso)
     with st.form(key=f"form_meta_{ind['id']}"):
@@ -185,7 +114,7 @@ with st.container(border=True, key="bloque_ficha"):
             st.rerun()
 
 # --------------------------------------------------------------------------
-# 3) Valores por año + visualización (tarjeta única: formulario y gráfico)
+# 3) Valores por año (edición) + visualización (gráfico de solo lectura)
 # --------------------------------------------------------------------------
 with st.container(border=True, key="bloque_valores"):
     st.markdown(f"### {t['valores_por_anio']}")
@@ -251,61 +180,6 @@ with st.container(border=True, key="bloque_valores"):
             st.rerun()
 
     # ----------------------------------------------------------------------
-    # Visualización: gráfico + métricas resumen
+    # Visualización (gráfico + métricas) — lógica compartida, solo lectura.
     # ----------------------------------------------------------------------
-    st.markdown(f"### {t['grafico_valores']}")
-
-    # Releemos por si acaba de haber un guardado en este mismo rerun.
-    valores_existentes = consultas.listar_valores_indicador(ind["id"])
-    # Omitimos puntos cuyo valor no sea numérico (to_numeric -> NaN), igual que
-    # en el resto de la app, para no romper el gráfico con cadenas tipo 'N/D'.
-    datos_num = []
-    for v in valores_existentes:
-        if not (v["periodo"] or "").isdigit():
-            continue
-        val = pd.to_numeric(v.get("valor"), errors="coerce")
-        if pd.isna(val):
-            continue
-        datos_num.append((int(v["periodo"]), float(val)))
-    datos_num.sort()
-
-    if datos_num:
-        df = pd.DataFrame(datos_num, columns=["anio", "valor"])
-        eje_y = ind.get("unidad") or t["valor"]
-        fig = px.bar(
-            df, x="anio", y="valor",
-            labels={"anio": t["anio"], "valor": eje_y},
-            text_auto=True,
-        )
-        fig.update_traces(marker_color="#1f5f3a")
-        # Coerción defensiva: meta_valor puede llegar no numérico desde la BD.
-        meta_v = pd.to_numeric(ind.get("meta_valor"), errors="coerce")
-        if pd.notna(meta_v):
-            fig.add_hline(
-                y=float(meta_v),
-                line_dash="dash",
-                annotation_text=f"{t['linea_meta']}: {float(meta_v):g}",
-                annotation_position="top right",
-            )
-        fig.update_layout(
-            height=350,
-            margin=dict(l=0, r=0, t=20, b=0),
-            font=dict(color="#1f2a26", size=13),
-            xaxis=dict(
-                tickmode="array",
-                tickvals=[d[0] for d in datos_num],
-                tickfont=dict(color="#1f2a26", size=12),
-            ),
-            yaxis=dict(tickfont=dict(color="#1f2a26", size=13)),
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Métricas: último valor + % de avance vs meta (si la hay)
-        ultimo_anio, ultimo_v = datos_num[-1]
-        mc1, mc2 = st.columns(2)
-        mc1.metric(f"{t['ultimo_valor']} ({ultimo_anio})", f"{ultimo_v:g}")
-        if pd.notna(meta_v) and float(meta_v) != 0:
-            pct = ultimo_v / float(meta_v) * 100
-            mc2.metric(t["avance_vs_meta"], f"{pct:.1f} %")
-    else:
-        st.caption(t["sin_valores_numericos"])
+    ckpi.grafico_valores(ind, t)

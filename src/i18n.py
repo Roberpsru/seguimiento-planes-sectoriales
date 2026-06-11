@@ -153,6 +153,23 @@ T = {
         "vision_general": "Visión general",
         "plan_activo_etiqueta": "Plan",
         "para_cambiar_portada": "para cambiar, vuelve a la portada",
+        # ---- Resumen del Plan: pestañas, movimientos y coordinación ----
+        "resumen_tab_cuadro": "Cuadro resumen",
+        "resumen_tab_movimientos": "Cuadro de movimientos",
+        "resumen_tab_indicadores": "Cuadro de indicadores",
+        "resumen_tab_coordinacion": "Coordinación",
+        "mov_otros": "Otros",
+        "movs_mas": "(+{n} más antiguos)",
+        "resumen_kpi_solo_lectura": (
+            "Vista de solo lectura. Para editar metas y valores, ve a la "
+            "página Indicadores."
+        ),
+        "coord_todos": "Todos",
+        "coord_fecha_desde": "Desde",
+        "coord_fecha_hasta": "Hasta",
+        "coord_buscar": "Buscar en encargo / gestor / resultado",
+        "coord_col_ambito": "Ámbito",
+        "coord_descargar": "Descargar tabla (Excel)",
         # ---- Página "Administración" ----
         "administracion": "Administración",
         "admin_descargar_titulo": "Descargar plan actual",
@@ -392,6 +409,24 @@ T = {
         "vision_general": "Ikuspegi orokorra",
         "plan_activo_etiqueta": "Plana",
         "para_cambiar_portada": "aldatzeko, itzuli azalera",
+        # ---- Planaren Laburpena: fitxak, mugimenduak eta koordinazioa ----
+        # NOTA: euskera en BORRADOR, pendiente de validar con comunicación de HAZI.
+        "resumen_tab_cuadro": "Laburpen-koadroa",
+        "resumen_tab_movimientos": "Mugimenduen koadroa",
+        "resumen_tab_indicadores": "Adierazleen koadroa",
+        "resumen_tab_coordinacion": "Koordinazioa",
+        "mov_otros": "Bestelakoak",
+        "movs_mas": "(+{n} zaharrago)",
+        "resumen_kpi_solo_lectura": (
+            "Irakurtzeko soilik. Helburuak eta balioak editatzeko, joan "
+            "Adierazleak orrira."
+        ),
+        "coord_todos": "Denak",
+        "coord_fecha_desde": "Noiztik",
+        "coord_fecha_hasta": "Noiz arte",
+        "coord_buscar": "Bilatu eskaeran / kudeatzailean / emaitzan",
+        "coord_col_ambito": "Esparrua",
+        "coord_descargar": "Deskargatu taula (Excel)",
         # ---- "Administrazioa" orria ----
         "administracion": "Administrazioa",
         "admin_descargar_titulo": "Deskargatu uneko plana",
