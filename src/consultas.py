@@ -97,6 +97,24 @@ def campos_bilingues(campos, idioma=None, sin_sufijo_es=False):
 # --------------------------------------------------------------------------
 # Planes / Ámbitos / Actuaciones
 # --------------------------------------------------------------------------
+def obtener_plan(plan_id):
+    """Devuelve TODAS las columnas de un plan como dict, o None si no existe.
+
+    A diferencia de listar_planes() (que solo trae un subconjunto), este getter
+    incluye periodo_inicio/fin, objetivo_macro_* y descripcion_*; lo usa el
+    informe PDF para la cabecera del Resumen.
+    """
+    con = db.conectar()
+    try:
+        fila = con.execute(
+            "SELECT * FROM planes WHERE id = ?",
+            (plan_id,),
+        ).fetchone()
+        return dict(fila) if fila else None
+    finally:
+        con.close()
+
+
 def listar_planes():
     """Devuelve todos los planes ordenados por id."""
     con = db.conectar()

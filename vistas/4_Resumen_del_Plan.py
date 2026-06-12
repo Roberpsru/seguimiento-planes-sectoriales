@@ -20,7 +20,7 @@ lee el idioma con idioma_actual(). La exportación a PDF NO entra en esta fase.
 """
 import html
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -135,6 +135,28 @@ tab_cuadro, tab_mov, tab_ind, tab_coord = st.tabs([
 # Pestaña a) Cuadro resumen
 # ==========================================================================
 with tab_cuadro:
+    # ---- Exportar a PDF (patrón "generar -> descargar"; no regenera por rerun) ----
+    with st.container(border=True, key="bloque_resumen_pdf"):
+        st.markdown(f"### {t['pdf_seccion']}")
+        if st.button(t["pdf_generar"], key="btn_pdf_resumen"):
+            with st.spinner(t["pdf_generando"]):
+                import informes_pdf  # import perezoso (reportlab/kaleido)
+                st.session_state["_pdf_resumen"] = {
+                    "bytes": informes_pdf.generar_pdf_resumen(plan["id"], idioma),
+                    "nombre": f"Resumen_{plan.get('codigo') or 'PLAN'}_{date.today().isoformat()}.pdf",
+                    "plan_id": plan["id"],
+                    "idioma": idioma,
+                }
+        _pdf = st.session_state.get("_pdf_resumen")
+        # Solo se ofrece la descarga si el PDF corresponde al plan e idioma actuales.
+        if _pdf and _pdf["plan_id"] == plan["id"] and _pdf["idioma"] == idioma:
+            st.download_button(
+                t["pdf_descargar"],
+                data=_pdf["bytes"],
+                file_name=_pdf["nombre"],
+                mime="application/pdf",
+            )
+
     # ---- Cabecera: nombre + periodo + objetivo + última actualización ----
     with st.container(border=True, key="bloque_resumen_cabecera"):
         st.markdown(

@@ -179,6 +179,13 @@ T = {
             "La clave de gestión no está configurada. Avisa al administrador "
             "(no se puede acceder a esta página)."
         ),
+        # ---- Exportación a PDF (Resumen del Plan) ----
+        "pdf_seccion": "Exportar a PDF",
+        "pdf_generar": "Generar PDF",
+        "pdf_generando": "Generando PDF…",
+        "pdf_descargar": "Descargar PDF",
+        "pdf_generado_el": "Generado el",
+        "pdf_grafico_no_disp": "(gráfico no disponible)",
         # ---- Página "Administración" ----
         "administracion": "Administración",
         "admin_descargar_titulo": "Descargar plan actual",
@@ -446,6 +453,14 @@ T = {
             "Kudeaketa-gakoa ez dago konfiguratuta. Abisatu administratzaileari "
             "(ezin da orri honetara sartu)."
         ),
+        # ---- PDFra esportatzea (Planaren Laburpena) ----
+        # NOTA: euskera en BORRADOR, pendiente de validar con comunicación de HAZI.
+        "pdf_seccion": "Esportatu PDFra",
+        "pdf_generar": "Sortu PDFa",
+        "pdf_generando": "PDFa sortzen…",
+        "pdf_descargar": "Deskargatu PDFa",
+        "pdf_generado_el": "Sortze-data:",
+        "pdf_grafico_no_disp": "(grafikoa ez dago erabilgarri)",
         # ---- "Administrazioa" orria ----
         "administracion": "Administrazioa",
         "admin_descargar_titulo": "Deskargatu uneko plana",

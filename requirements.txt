@@ -3,3 +3,8 @@ pandas>=2.0
 plotly>=5.20
 openpyxl>=3.1
 psycopg2-binary>=2.9.9
+# Informes PDF (pestaña "Cuadro resumen" de Resumen del Plan).
+# Los gráficos del PDF se dibujan con reportlab.graphics (NO kaleido): plotly 6
+# + kaleido es incompatible y cuelga la conversión. Ver CLAUDE.md.
+# (Pillow lo aporta Streamlit como dependencia transitiva; no se fija aquí.)
+reportlab==4.2.5
