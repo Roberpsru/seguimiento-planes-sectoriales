@@ -720,6 +720,9 @@ TITULOS_PAGINAS = {
         "indicadores": "Indicadores",
         "resumen": "Resumen del Plan",
         "administracion": "Administración",
+        # Títulos de SECCIÓN del menú (st.navigation con dict de secciones).
+        "seccion_consulta": "Consulta",
+        "seccion_gestion": "Gestión",
     },
     "eu": {
         "inicio": "Hasiera",
@@ -728,6 +731,9 @@ TITULOS_PAGINAS = {
         "indicadores": "Adierazleak",
         "resumen": "Planaren laburpena",
         "administracion": "Administrazioa",
+        # Títulos de SECCIÓN del menú. Euskera en BORRADOR (validar con HAZI).
+        "seccion_consulta": "Kontsulta",
+        "seccion_gestion": "Kudeaketa",
     },
 }
 

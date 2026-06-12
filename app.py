@@ -50,14 +50,21 @@ selector_idioma_portada()
 idioma = idioma_actual()
 tit = TITULOS_PAGINAS[idioma]
 
-paginas = [
-    st.Page("vistas/Inicio.py", title=tit["inicio"], default=True),
-    st.Page("vistas/1_Vision_general.py", title=tit["vision_general"]),
-    st.Page("vistas/2_Gestion_actuaciones.py", title=tit["gestion"]),
-    st.Page("vistas/3_Indicadores.py", title=tit["indicadores"]),
-    st.Page("vistas/4_Resumen_del_Plan.py", title=tit["resumen"]),
-    st.Page("vistas/5_Administracion.py", title=tit["administracion"]),
-]
+# Menú agrupado en SECCIONES (dict {título_sección: [st.Page, ...]}). El orden
+# del menú lo da el orden de las secciones y de las páginas dentro de cada una;
+# los títulos (de sección y de página) salen del idioma activo.
+secciones = {
+    tit["seccion_consulta"]: [
+        st.Page("vistas/Inicio.py", title=tit["inicio"], default=True),
+        st.Page("vistas/1_Vision_general.py", title=tit["vision_general"]),
+        st.Page("vistas/4_Resumen_del_Plan.py", title=tit["resumen"]),
+    ],
+    tit["seccion_gestion"]: [
+        st.Page("vistas/2_Gestion_actuaciones.py", title=tit["gestion"]),
+        st.Page("vistas/3_Indicadores.py", title=tit["indicadores"]),
+        st.Page("vistas/5_Administracion.py", title=tit["administracion"]),
+    ],
+}
 
-pg = st.navigation(paginas)
+pg = st.navigation(secciones)
 pg.run()

@@ -51,6 +51,17 @@ section[data-testid="stSidebar"] span {
     color: #1f2a26;
 }
 
+/* Encabezados de sección del menú (st.navigation, testid stNavSectionHeader
+   en Streamlit 1.57): en NEGRITA, con peso/tamaño similares a la etiqueta
+   "Idioma" del sidebar (0.95rem / 600), texto oscuro y sin mayúsculas forzadas. */
+section[data-testid="stSidebar"] [data-testid="stNavSectionHeader"],
+section[data-testid="stSidebar"] [data-testid="stNavSectionHeader"] * {
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    color: #1f2a26 !important;
+    text-transform: none !important;
+}
+
 /* --------------------------------------------------------------------- */
 /* Encabezados: jerarquía por color + peso + tamaño (sin barra lateral)  */
 /* --------------------------------------------------------------------- */

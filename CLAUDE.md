@@ -188,10 +188,15 @@ carpeta mágica `pages/`: si estuvieran en `pages/`, Streamlit las autoañadirí
 al sidebar **además** del menú de `st.navigation`, duplicando la navegación.
 Por eso la carpeta se llama `vistas/`.
 
-- **Orden del menú**: lo da el ORDEN de la lista que se pasa a `st.navigation`
-  en `app.py`, no el nombre de fichero. Los prefijos numéricos (`1_`, `2_`…)
-  se conservan por familiaridad pero ya no determinan el orden. Para reordenar,
-  reordena la lista `paginas` en `app.py`.
+- **Orden y secciones del menú**: `app.py` pasa a `st.navigation` un **dict de
+  secciones** `{título_sección: [st.Page, ...]}`. El orden lo dan el orden de las
+  secciones y el de las páginas dentro de cada una (no el nombre de fichero; los
+  prefijos numéricos `1_`, `2_`… se conservan por familiaridad pero ya no
+  determinan el orden). Hoy hay dos grupos: **"Consulta"** (Inicio, Visión
+  general, Resumen del Plan) y **"Gestión"** (Gestión de actuaciones,
+  Indicadores, Administración). Los títulos de sección salen del idioma activo
+  (`TITULOS_PAGINAS[idioma]["seccion_consulta"]` / `"seccion_gestion"`; euskera
+  en borrador). Para reordenar o regrupar, edita el dict `secciones` en `app.py`.
 - **Títulos traducidos**: cada `st.Page(..., title=...)` toma el título del
   idioma activo desde `TITULOS_PAGINAS[idioma_actual()]` en `src/i18n.py`. Al
   cambiar de idioma en el sidebar, los nombres del menú cambian al instante.
