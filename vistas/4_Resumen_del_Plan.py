@@ -579,13 +579,71 @@ with tab_coord:
             # st.dataframe: scroll propio y ordenación por columna.
             st.dataframe(vista, use_container_width=True, hide_index=True)
 
-            # Descarga de la tabla FILTRADA como Excel.
-            buf = BytesIO()
-            vista.to_excel(buf, index=False, engine="openpyxl")
             codigo_plan = plan.get("codigo") or "PLAN"
-            st.download_button(
-                t["coord_descargar"],
-                data=buf.getvalue(),
-                file_name=f"Coordinacion_{codigo_plan}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+            # Descripción legible de los filtros aplicados (para el PDF) y
+            # "firma" para invalidar el PDF cacheado si cambian los filtros.
+            partes = []
+            if amb_sel is not None:
+                partes.append(
+                    f"{t['selecciona_ambito']}: "
+                    f"{amb_por_id[amb_sel].get('codigo') or ''} · "
+                    f"{_nombre(amb_por_id[amb_sel], 'nombre_es', 'nombre_eu')}".strip(" ·")
+                )
+            if act_sel is not None:
+                partes.append(
+                    f"{t['selecciona_actuacion']}: "
+                    f"{act_por_id[act_sel].get('codigo') or ''} · "
+                    f"{_nombre(act_por_id[act_sel], 'nombre_es', 'nombre_eu')}".strip(" ·")
+                )
+            if f_desde is not None:
+                partes.append(f"{t['coord_fecha_desde']}: {f_desde.strftime('%d/%m/%Y')}")
+            if f_hasta is not None:
+                partes.append(f"{t['coord_fecha_hasta']}: {f_hasta.strftime('%d/%m/%Y')}")
+            if texto and texto.strip():
+                partes.append(f'{t["coord_buscar"]}: "{texto.strip()}"')
+            filtros_desc = " · ".join(partes) if partes else t["pdf_sin_filtros"]
+            firma = (
+                amb_sel, act_sel,
+                f_desde.isoformat() if f_desde else None,
+                f_hasta.isoformat() if f_hasta else None,
+                (texto or "").strip(),
             )
+
+            col_xls, col_pdf = st.columns(2)
+            # Descarga de la tabla FILTRADA como Excel.
+            with col_xls:
+                buf = BytesIO()
+                vista.to_excel(buf, index=False, engine="openpyxl")
+                st.download_button(
+                    t["coord_descargar"],
+                    data=buf.getvalue(),
+                    file_name=f"Coordinacion_{codigo_plan}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            # Generar PDF (apaisado) de la tabla filtrada (patrón generar→descargar).
+            with col_pdf:
+                if st.button(t["pdf_generar"], key="btn_pdf_coord"):
+                    with st.spinner(t["pdf_generando"]):
+                        import informes_pdf  # import perezoso (reportlab)
+                        st.session_state["_pdf_coord"] = {
+                            "bytes": informes_pdf.generar_pdf_coordinacion(
+                                plan["id"], idioma, df_f, filtros_desc),
+                            "nombre": f"Coordinacion_{codigo_plan}_{date.today().isoformat()}.pdf",
+                            "plan_id": plan["id"],
+                            "idioma": idioma,
+                            "firma": firma,
+                        }
+
+            # La descarga del PDF solo se ofrece si corresponde al plan, idioma
+            # y FILTROS actuales; al cambiar cualquiera, hay que regenerarlo.
+            _pdfc = st.session_state.get("_pdf_coord")
+            if (_pdfc and _pdfc["plan_id"] == plan["id"]
+                    and _pdfc["idioma"] == idioma and _pdfc["firma"] == firma):
+                st.download_button(
+                    t["pdf_descargar"],
+                    data=_pdfc["bytes"],
+                    file_name=_pdfc["nombre"],
+                    mime="application/pdf",
+                    key="dl_pdf_coord",
+                )

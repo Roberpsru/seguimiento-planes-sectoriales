@@ -186,6 +186,7 @@ T = {
         "pdf_descargar": "Descargar PDF",
         "pdf_generado_el": "Generado el",
         "pdf_grafico_no_disp": "(gráfico no disponible)",
+        "pdf_sin_filtros": "(sin filtros)",
         # ---- Página "Administración" ----
         "administracion": "Administración",
         "admin_descargar_titulo": "Descargar plan actual",
@@ -461,6 +462,7 @@ T = {
         "pdf_descargar": "Deskargatu PDFa",
         "pdf_generado_el": "Sortze-data:",
         "pdf_grafico_no_disp": "(grafikoa ez dago erabilgarri)",
+        "pdf_sin_filtros": "(iragazkirik gabe)",
         # ---- "Administrazioa" orria ----
         "administracion": "Administrazioa",
         "admin_descargar_titulo": "Deskargatu uneko plana",

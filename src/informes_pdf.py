@@ -29,7 +29,7 @@ from reportlab.graphics.charts.legends import Legend
 from reportlab.graphics.charts.piecharts import Pie
 from reportlab.graphics.shapes import Drawing
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
@@ -60,7 +60,8 @@ BORDE = colors.HexColor("#D9E1DD")
 CEBRA = colors.HexColor("#F5F7F5")
 TEXTO = colors.HexColor("#1F2A26")
 
-ANCHO_UTIL_MM = 174  # A4 (210) - márgenes (18+18)
+ANCHO_UTIL_MM = 174  # A4 retrato (210) - márgenes (18+18)
+ANCHO_UTIL_APAISADO_MM = 261  # A4 apaisado (297) - márgenes (18+18)
 SEP_BLOQUE = 18 * mm  # ~2 cm de aire antes de cada título de bloque
 
 
@@ -153,7 +154,8 @@ def pie_factory(t, fecha_txt):
         canvas.setFillColor(GRIS_TXT)
         canvas.drawString(doc.leftMargin, 10 * mm,
                           f"{t['pdf_generado_el']} {fecha_txt}")
-        canvas.drawRightString(A4[0] - doc.rightMargin, 10 * mm,
+        # Ancho real de la página (vale para retrato y apaisado).
+        canvas.drawRightString(doc.pagesize[0] - doc.rightMargin, 10 * mm,
                                str(canvas.getPageNumber()))
         canvas.restoreState()
     return _pie
@@ -181,11 +183,12 @@ def tabla_estilizada(filas, est, anchos=None):
     return tabla
 
 
-def construir_pdf(titulo, t, cuerpo, fecha_txt, est, subtitulo=None):
-    """Arma el documento A4 retrato con cabecera + cuerpo + pie y devuelve bytes."""
+def construir_pdf(titulo, t, cuerpo, fecha_txt, est, subtitulo=None, apaisado=False):
+    """Arma el documento A4 (retrato o apaisado) con cabecera + cuerpo + pie y
+    devuelve bytes."""
     buf = BytesIO()
     doc = SimpleDocTemplate(
-        buf, pagesize=A4,
+        buf, pagesize=landscape(A4) if apaisado else A4,
         leftMargin=18 * mm, rightMargin=18 * mm,
         topMargin=16 * mm, bottomMargin=18 * mm,
         title=f"{titulo} — {subtitulo}" if subtitulo else titulo,
@@ -504,4 +507,60 @@ def generar_pdf_resumen(plan_id, idioma):
     fecha_txt = datetime.now().strftime("%d/%m/%Y %H:%M")
     return construir_pdf(
         t["resumen_plan"], t, cuerpo, fecha_txt, est, subtitulo=nombre_plan
+    )
+
+
+# ==========================================================================
+# INFORME CONCRETO: Registros de coordinación (A4 apaisado)
+# ==========================================================================
+def generar_pdf_coordinacion(plan_id, idioma, df_filtrado, filtros_desc):
+    """PDF (A4 apaisado) de los registros de coordinación TAL COMO están
+    filtrados: se recibe `df_filtrado` (el mismo DataFrame que alimenta la tabla
+    y el Excel, con las columnas de consultas.listar_coordinaciones) y
+    `filtros_desc` (línea de filtros aplicados, o "(sin filtros)").
+    Reutiliza la infraestructura común (cabecera con logos, estilos, pie)."""
+    import pandas as pd
+    import i18n
+
+    t = i18n.textos(idioma)
+    est = estilos()
+    plan = consultas.obtener_plan(plan_id) or {}
+
+    def _nombre(item, ce, cu):
+        if idioma == "eu" and item.get(cu):
+            return item[cu]
+        return item.get(ce, "") or ""
+
+    nombre_plan = _nombre(plan, "nombre_es", "nombre_eu") or plan.get("codigo") or "—"
+
+    cuerpo = [
+        Paragraph(f"<b>{t['filtros']}:</b> {filtros_desc}", est["normal"]),
+        Spacer(1, 6),
+    ]
+
+    if df_filtrado is None or df_filtrado.empty:
+        cuerpo.append(Paragraph(t["coord_sin_registros"], est["caption"]))
+    else:
+        def _txt(v):
+            return "—" if (pd.isna(v) or str(v).strip() == "") else str(v)
+
+        filas = [[
+            t["coord_fecha"], t["coord_col_ambito"], t["coord_col_actuacion"],
+            t["coord_encargo"], t["coord_gestor"], t["coord_resultado"],
+        ]]
+        for _, r in df_filtrado.iterrows():
+            ambito = f"{r.get('ambito_codigo') or ''} · {r.get('ambito_nombre') or ''}".strip(" ·")
+            actuacion = f"{r.get('act_codigo') or ''} · {r.get('actuacion_nombre') or ''}".strip(" ·")
+            filas.append([
+                _fmt_fecha(r.get("fecha")),
+                ambito, actuacion,
+                _txt(r.get("encargo")), _txt(r.get("gestor")), _txt(r.get("resultado")),
+            ])
+        anchos = [24, 40, 48, 55, 38, 56]  # suman 261 mm (A4 apaisado útil)
+        cuerpo.append(tabla_estilizada(filas, est, anchos=[a * mm for a in anchos]))
+
+    fecha_txt = datetime.now().strftime("%d/%m/%Y %H:%M")
+    return construir_pdf(
+        t["coord_registros_titulo"], t, cuerpo, fecha_txt, est,
+        subtitulo=nombre_plan, apaisado=True,
     )
