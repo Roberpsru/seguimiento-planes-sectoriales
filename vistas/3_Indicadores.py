@@ -25,6 +25,7 @@ import streamlit as st
 # Hacer accesibles los módulos compartidos en src/
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import acceso  # noqa: E402
 import componentes_kpi as ckpi  # noqa: E402
 import consultas  # noqa: E402
 from i18n import (  # noqa: E402
@@ -44,6 +45,7 @@ ANIOS_KPI = [2025, 2026, 2027, 2028]
 # --------------------------------------------------------------------------
 idioma = idioma_actual()
 t = textos(idioma)
+acceso.requiere_clave(t)  # barrera de edición: corta aquí si no está autorizado
 plan_id = asegurar_plan_id()
 
 st.title(t["indicadores_kpi"])

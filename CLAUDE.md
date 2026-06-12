@@ -112,7 +112,8 @@ Sitios donde hoy se aplica `traducir_categoria`: selector "Tipo" y ficha en
 - `src/db.py` — acceso **agnóstico de motor** (SQLite o PostgreSQL). `get_conexion()` (alias `conectar()`) abre la conexión al motor activo; `P()` da el placeholder; `ejecutar()` e `insertar_devolver_id()` encapsulan diferencias entre motores; `inicializar_db()` crea el esquema correcto. Ver sección **Persistencia**.
 - `src/arranque.py` — `inicializar_si_necesario()`: en SQLite crea el esquema y carga los Excel de `datos/` si la BD está vacía. Lo llama el router `app.py` al arrancar. En PostgreSQL no hace nada.
 - `src/consultas.py` — funciones reutilizables para consultar planes, ámbitos, actuaciones, indicadores, seguimientos y coordinaciones. Incluye `campos_bilingues()`, vía canónica para seleccionar textos de datos en el idioma activo con fallback (ver **Idioma y bilingüismo**). Para coordinaciones: `anadir_coordinacion(...)` (INSERT con placeholder `?`) y `listar_coordinaciones(plan_id, idioma)` (DataFrame vía `db.leer_df` + `campos_bilingues`; incluye `ambito_id`/`ambito_codigo`/`ambito_nombre` y `actuacion_id` para poder filtrar). Para el histórico: `listar_movimientos(plan_id, idioma, limite=None)` (todos los seguimientos, o LIMIT si `limite`); `ultimos_movimientos()` queda como alias fino.
-- `src/componentes_kpi.py` — componentes de Indicadores de **solo lectura** reutilizados por `vistas/3_Indicadores.py` (edición) y la pestaña "Cuadro de indicadores" de Resumen: `selector_categoria_indicador(plan, t, idioma, key_prefix)`, `ficha_indicador(...)` y `grafico_valores(...)`. No abren contenedor ni usan `st.stop()` (seguros dentro de `st.tabs`); el `key_prefix` evita que las dos vistas compartan estado de selector.
+- `src/componentes_kpi.py` — componentes de Indicadores de **solo lectura** reutilizados por `vistas/3_Indicadores.py` (edición) y la pestaña "Cuadro de indicadores" de Resumen: `selector_categoria_indicador(plan, t, idioma, key_prefix)`, `ficha_indicador(...)`, `tabla_valores_solo_lectura(...)` y `grafico_valores(...)`. No abren contenedor ni usan `st.stop()` (seguros dentro de `st.tabs`); el `key_prefix` evita que las dos vistas compartan estado de selector.
+- `src/acceso.py` — `requiere_clave(t)`: barrera por **clave compartida** en las TRES páginas de edición (Gestión de actuaciones, Indicadores, Administración); las de solo consulta (Inicio, Visión general, Resumen del Plan) quedan abiertas. Se llama justo tras leer idioma/textos y, si la sesión no está autorizada, pinta un formulario `password` y hace `st.stop()`. La clave se lee de `st.secrets["CLAVE_GESTION"]` o `os.environ["CLAVE_GESTION"]`; si no está configurada, **fail-closed** (bloqueado con aviso). Comparación EXACTA (case-sensitive). Autorización para toda la sesión vía `st.session_state["_acceso_gestion_ok"]` (clave persistente, NO es key de widget — pitfall 1).
 - `src/importador.py` — `cargar_plan_desde_excel()` y `exportar_plan_a_excel()`. Lo usan tanto el CLI como la página de Administración.
 - `db/schema_sqlite.sql` y `db/schema_postgres.sql` — mismo esquema en cada dialecto. Tablas: `planes`, `ambitos`, `responsables`, `actuaciones`, `actuacion_responsables`, `seguimientos`, `coordinaciones`, `indicadores`, `indicador_valores`, `alertas` (esta última definida pero todavía no utilizada por la app). `db.py` elige el fichero según el motor activo.
   - `coordinaciones` — diario de coordinación por actuación (1:N con `actuaciones`, `ON DELETE CASCADE`). Columnas: `fecha` (ISO `AAAA-MM-DD`, **obligatoria**, no bilingüe), `encargo_realizado_es/_eu`, `gestor_operacion_es/_eu`, `resultado_es/_eu` (datos **bilingües**) y `fecha_registro`. La descripción de la actuación NO se almacena aquí: se obtiene por JOIN (se usa `objetivo_impacto_es/_eu`). La alimenta la hoja "Coordinación" del Excel y también se gestiona (alta + listado) desde **Administración → pestaña "Coordinación"**; en Supabase se creó con `db/migracion_coordinacion.sql` (con RLS activado).
@@ -321,16 +322,19 @@ Copiar `.streamlit/secrets.toml.example` a `.streamlit/secrets.toml` y poner la
 
 ### ⚠️ Pruebas y secretos (regla obligatoria)
 
-- **Las pruebas locales se hacen SIEMPRE contra SQLite.** Durante el desarrollo,
-  `.streamlit/secrets.toml` está **renombrado a `.streamlit/secrets.toml.PROD`**
-  para que `db.py` resuelva SQLite (`db/seguimiento.db`) y ninguna prueba ni
-  script toque Supabase por accidente. Solo se restaura (`secrets.toml.PROD` →
-  `secrets.toml`) para **desplegar** o para una **operación deliberada contra
-  Supabase**, y se **vuelve a renombrar** a `.PROD` nada más terminar.
-  > Aprendido a las malas: con `secrets.toml` presente, `db._resolver_motor()`
-  > elige PostgreSQL y `db.inicializar_db()` se ejecuta contra Supabase (creó
-  > una tabla en producción durante un test). Tanto `secrets.toml` como
-  > `secrets.toml.PROD` están en `.gitignore` (contienen credenciales).
+- **Las pruebas locales se hacen SIEMPRE contra SQLite.** El
+  `.streamlit/secrets.toml` de desarrollo contiene **solo `CLAVE_GESTION`** (la
+  clave de las páginas de edición), **sin `DATABASE_URL`**, de modo que `db.py`
+  resuelve SQLite (`db/seguimiento.db`) y ninguna prueba ni script toca Supabase
+  por accidente. El `DATABASE_URL` de producción vive en
+  `.streamlit/secrets.toml.PROD` (no se usa en local). Para una **operación
+  deliberada contra Supabase** se añade temporalmente `DATABASE_URL` al
+  `secrets.toml` (o se restaura desde `.PROD`) y se quita nada más terminar. En
+  Streamlit Cloud, `CLAVE_GESTION` y `DATABASE_URL` se configuran en Secrets.
+  > Aprendido a las malas: con `DATABASE_URL` presente en secrets,
+  > `db._resolver_motor()` elige PostgreSQL y `db.inicializar_db()` se ejecuta
+  > contra Supabase (una vez creó una tabla en producción durante un test).
+  > `secrets.toml` y `secrets.toml.PROD` están en `.gitignore` (credenciales/clave).
 - **NUNCA imprimir `DATABASE_URL` ni ningún secreto** (contraseñas, tokens,
   cadenas de conexión) en logs, salidas de consola ni mensajes. Si necesitas
   confirmar el motor activo, imprime solo `db.MOTOR_BD` (`'sqlite'`/`'postgres'`),

@@ -21,6 +21,7 @@ import streamlit as st
 # Añadimos src/ al path para poder importar los módulos compartidos
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import acceso  # noqa: E402
 import consultas  # noqa: E402
 from i18n import (  # noqa: E402
     ANIOS,
@@ -97,6 +98,7 @@ def recomponer_fecha(periodo, anio):
 # --------------------------------------------------------------------------
 idioma = idioma_actual()
 t = textos(idioma)
+acceso.requiere_clave(t)  # barrera de edición: corta aquí si no está autorizado
 plan_id = asegurar_plan_id()
 etiq_estado = etiquetas_estado(t)
 etiq_periodo = etiquetas_periodo(t)

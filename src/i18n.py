@@ -170,6 +170,15 @@ T = {
         "coord_buscar": "Buscar en encargo / gestor / resultado",
         "coord_col_ambito": "Ámbito",
         "coord_descargar": "Descargar tabla (Excel)",
+        # ---- Acceso (clave de gestión) en páginas de edición ----
+        "acceso_titulo": "Acceso restringido",
+        "acceso_campo": "Clave de gestión",
+        "acceso_boton": "Entrar",
+        "acceso_error": "Clave incorrecta.",
+        "acceso_no_config": (
+            "La clave de gestión no está configurada. Avisa al administrador "
+            "(no se puede acceder a esta página)."
+        ),
         # ---- Página "Administración" ----
         "administracion": "Administración",
         "admin_descargar_titulo": "Descargar plan actual",
@@ -427,6 +436,16 @@ T = {
         "coord_buscar": "Bilatu eskaeran / kudeatzailean / emaitzan",
         "coord_col_ambito": "Esparrua",
         "coord_descargar": "Deskargatu taula (Excel)",
+        # ---- Sarbidea (kudeaketa-gakoa) edizio-orrietan ----
+        # NOTA: euskera en BORRADOR, pendiente de validar con comunicación de HAZI.
+        "acceso_titulo": "Sarbide mugatua",
+        "acceso_campo": "Kudeaketa-gakoa",
+        "acceso_boton": "Sartu",
+        "acceso_error": "Gako okerra.",
+        "acceso_no_config": (
+            "Kudeaketa-gakoa ez dago konfiguratuta. Abisatu administratzaileari "
+            "(ezin da orri honetara sartu)."
+        ),
         # ---- "Administrazioa" orria ----
         "administracion": "Administrazioa",
         "admin_descargar_titulo": "Deskargatu uneko plana",

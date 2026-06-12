@@ -19,12 +19,14 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import acceso  # noqa: E402
 import consultas  # noqa: E402
 import importador  # noqa: E402
 from i18n import asegurar_plan_id, idioma_actual, plan_actual, textos  # noqa: E402
 
 idioma = idioma_actual()
 t = textos(idioma)
+acceso.requiere_clave(t)  # barrera de edición: corta aquí si no está autorizado
 plan_id = asegurar_plan_id()
 
 # Administración debe poder usarse con la BD vacía (es donde se carga el primer
